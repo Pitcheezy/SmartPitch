@@ -8,3 +8,12 @@ wheels/
 
 # Virtual environments
 .venv
+# 모델 가중치 파일 및 결과 이미지
+*.pth
+*.png
+*.csv
+
+# 로깅 및 테스트 폴더
+wandb/
+.ipynb_checkpoints/
+.python-version
