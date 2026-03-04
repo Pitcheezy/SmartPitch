@@ -32,7 +32,7 @@ def main():
             "pitcher": f"{player_first_name} {player_last_name}",
             "season": "2019",
             "model_type": "PyTorch MLP",
-            "epochs": 50,
+            "epochs": 5,
             "hidden_dims": [128, 64],
             "dropout_rate": 0.2,
             "learning_rate": 0.001
