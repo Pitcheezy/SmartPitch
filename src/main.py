@@ -1,11 +1,15 @@
 import wandb
 import os
+import sys
+
+# src 패키지를 인식할 수 있도록 프로젝트 루트 경로를 sys.path에 추가합니다.
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # 생성한 모듈 불러오기
-from data_loader import PitchDataLoader
-from clustering import PitchClustering
-from model import TransitionProbabilityModel
-from mdp_solver import MDPOptimizer
+from src.data_loader import PitchDataLoader
+from src.clustering import PitchClustering
+from src.model import TransitionProbabilityModel
+from src.mdp_solver import MDPOptimizer
 
 def main():
     import sys

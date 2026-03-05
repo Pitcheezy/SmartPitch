@@ -17,3 +17,9 @@ wheels/
 wandb/
 .ipynb_checkpoints/
 .python-version
+
+# 테스트 및 임시 파일 무시
+test.ipynb
+wandb_test.py
+data_download.py
+

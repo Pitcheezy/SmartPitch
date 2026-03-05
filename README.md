@@ -22,4 +22,4 @@ cd SmartPitch
 uv sync
 
 # 3. 전체 파이프라인 실행
-uv run main.py
+uv run src/main.py
