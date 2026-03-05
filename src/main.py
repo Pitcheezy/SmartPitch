@@ -10,6 +10,8 @@ from src.data_loader import PitchDataLoader
 from src.clustering import PitchClustering
 from src.model import TransitionProbabilityModel
 from src.mdp_solver import MDPOptimizer
+from src.pitch_env import PitchEnv
+from src.rl_trainer import DQNTrainer
 
 def main():
     import sys
@@ -35,11 +37,19 @@ def main():
         config={
             "pitcher": f"{player_first_name} {player_last_name}",
             "season": "2019",
+            # MLP 설정
             "model_type": "PyTorch MLP",
             "epochs": 5,
             "hidden_dims": [128, 64],
             "dropout_rate": 0.2,
-            "learning_rate": 0.001
+            "learning_rate": 0.001,
+            # DQN 설정
+            "dqn_total_timesteps": 300_000,
+            "dqn_buffer_size": 100_000,
+            "dqn_learning_rate": 1e-4,
+            "dqn_exploration_fraction": 0.30,
+            "dqn_exploration_final_eps": 0.05,
+            "dqn_gamma": 0.99,
         }
     )
     
@@ -102,10 +112,50 @@ def main():
             pitch_names=identified_pitch_names,
             zones=strike_zones
         )
-        
+
         # 가치 반복 계산 및 W&B Table에 결과 로깅
         optimal_policy = optimizer.run_optimizer()
-        
+
+        # -------------------------------------------------------------
+        # 6. DQN 강화학습 에이전트 학습 (PitchEnv + DQNTrainer)
+        # -------------------------------------------------------------
+        print("\n[단계 5] DQN Model-Free 강화학습 에이전트 학습")
+
+        # 환경 생성 (학습용 / 평가용 각각)
+        train_env = PitchEnv(
+            transition_model=model_module,
+            pitch_names=identified_pitch_names,
+            zones=strike_zones,
+        )
+        eval_env = PitchEnv(
+            transition_model=model_module,
+            pitch_names=identified_pitch_names,
+            zones=strike_zones,
+        )
+
+        dqn_config = wandb.config
+        trainer = (
+            DQNTrainer(env=train_env, eval_env=eval_env)
+            .build(
+                learning_rate=dqn_config.dqn_learning_rate,
+                buffer_size=dqn_config.dqn_buffer_size,
+                exploration_fraction=dqn_config.dqn_exploration_fraction,
+                exploration_final_eps=dqn_config.dqn_exploration_final_eps,
+                gamma=dqn_config.dqn_gamma,
+            )
+        )
+
+        trainer.train(
+            total_timesteps=dqn_config.dqn_total_timesteps,
+            use_wandb=True,
+        )
+
+        # 학습된 정책 평가 및 W&B 로깅
+        trainer.evaluate(n_episodes=100)
+
+        # 주요 볼카운트별 추천 구종 출력
+        trainer.print_policy_sample(train_env)
+
         print("\n" + "=" * 60)
         print("모든 SmartPitch 파이프라인이 성공적으로 완료되었습니다!")
         print("=" * 60)
