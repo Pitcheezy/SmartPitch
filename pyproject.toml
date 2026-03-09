@@ -3,7 +3,7 @@ name = "SmartPitch"
 version = "0.1.0"
 description = "End-to-End MLB Pitch Sequence Optimization Pipeline using PyTorch MLP and Markov Decision Process (MDP) with DQN Reinforcement Learning"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "ipykernel>=7.2.0",
     "jupyter>=1.1.1",
