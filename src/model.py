@@ -72,6 +72,23 @@ class TransitionProbabilityModel:
         Train/Val DataLoader를 생성
         """
         print("데이터 전처리 및 인코딩 중...")
+        # ==========================================
+        # 추가: 타자 군집 매핑표 로드 및 병합
+        csv_path = os.path.join(os.path.dirname(__file__), "..", "data", "batter_clusters_2023.csv")
+        try:
+            if os.path.exists(csv_path):
+                df_clusters = pd.read_csv(csv_path)
+                self.df = self.df.merge(df_clusters[['batter_id', 'cluster']], left_on='batter', right_on='batter_id', how='left')
+                self.df['batter_cluster'] = self.df['cluster'].fillna(0).astype(int).astype(str)
+                print(f"[Model] 타자 군집(batter_cluster) 병합 완료")
+            else:
+                self.df['batter_cluster'] = "0"
+                print(f"[Model] Warning: '{csv_path}' 파일이 없습니다. 기본 군집(0) 할당.")
+        except Exception as e:
+            self.df['batter_cluster'] = "0"
+            print(f"[Model] Error loading cluster csv: {e}")
+        # ==========================================
+
         # 1. count_state 만들기 (볼-스트라이크_아웃_주자123)
         self.df['count_state'] = (
             self.df['balls'].astype(int).astype(str) + "-" + 
@@ -81,11 +98,11 @@ class TransitionProbabilityModel:
         )
         
         # 2. X, y 정의
-        X_raw = self.df[['count_state', 'mapped_pitch_name', 'zone']]
+        X_raw = self.df[['count_state', 'mapped_pitch_name', 'zone', 'batter_cluster']]
         y_raw = self.df['description']
         
         # X: One-Hot Encoding
-        X_encoded = pd.get_dummies(X_raw, columns=['count_state', 'mapped_pitch_name', 'zone'])
+        X_encoded = pd.get_dummies(X_raw, columns=['count_state', 'mapped_pitch_name', 'zone', 'batter_cluster'])
         self.feature_columns = X_encoded.columns.tolist()
         
         # y: Label Encoding

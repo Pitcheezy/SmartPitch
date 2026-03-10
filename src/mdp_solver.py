@@ -63,7 +63,7 @@ class MDPOptimizer:
         return: List of (next_state_key, probability, runs_scored)
         """
         try:
-            count, outs_str, runners = current_state.split('_')
+            count, outs_str, runners, cluster = current_state.split('_')
             b, s = map(int, count.split('-'))
             outs = int(outs_str)
         except Exception:
@@ -136,13 +136,13 @@ class MDPOptimizer:
             if n_outs >= 3:
                 results.append(("END", prob, runs))
             else:
-                results.append((f"{n_cnt}_{n_outs}_{n_run}", prob, runs))
+                results.append((f"{n_cnt}_{n_outs}_{n_run}_{cluster}", prob, runs))
                 
         return results
 
     def solve_mdp(self):
         """
-        288개 상태에 대해 가치 반복(Value Iteration)을 수행하여
+        2304개 상태에 대해 가치 반복(Value Iteration)을 수행하여
         RE24 기반 실점 억제 기대치가 가장 높은 최적의 행동(구종, 코스)을 계산
         """
         print("8장: RE24 기반 MDP 최적 투구 전략 역순 계산 중...")
@@ -150,9 +150,10 @@ class MDPOptimizer:
         counts = ["3-2", "2-2", "3-1", "1-2", "2-1", "3-0", "0-2", "1-1", "2-0", "0-1", "1-0", "0-0"]
         outs = ["2", "1", "0"]
         runners = ["111", "011", "101", "110", "001", "010", "100", "000"]
+        clusters = [str(i) for i in range(8)]
         
-        # 288개 상태 공간 생성
-        states = [f"{c}_{o}_{r}" for c, o, r in itertools.product(counts, outs, runners)]
+        # 288 * 8 = 2304개 상태 공간 생성
+        states = [f"{c}_{o}_{r}_{cl}" for c, o, r, cl in itertools.product(counts, outs, runners, clusters)]
         
         # 상태 가치 초기화
         self.state_values = {state: 0.0 for state in states}
@@ -167,20 +168,22 @@ class MDPOptimizer:
                 best_action = None
                 best_expected_reward = float('-inf')
                 
-                _, cur_outs_str, cur_runners = state.split('_')
+                _, cur_outs_str, cur_runners, cur_cluster = state.split('_')
                 current_re24 = self._get_re24(int(cur_outs_str), cur_runners)
                 
                 for pitch in self.pitch_names:
                     for zone in self.zones:
                         input_df = input_df_template.copy()
                         
-                        state_col = f"count_state_{state}"
+                        state_col = f"count_state_{state.rsplit('_', 1)[0]}"
                         pitch_col = f"mapped_pitch_name_{pitch}"
                         zone_col = f"zone_{zone}"
+                        cluster_col = f"batter_cluster_{cur_cluster}"
                         
                         if state_col in input_df.columns: input_df[state_col] = 1
                         if pitch_col in input_df.columns: input_df[pitch_col] = 1
                         if zone_col in input_df.columns: input_df[zone_col] = 1
+                        if cluster_col in input_df.columns: input_df[cluster_col] = 1
                         
                         outcome_proba = self.transition_model.predict_proba(input_df)[0]
                         
@@ -198,7 +201,7 @@ class MDPOptimizer:
                                     next_re24 = 0.0
                                     future_value = 0.0
                                 else:
-                                    _, n_outs_str, n_runners = next_state_key.split('_')
+                                    _, n_outs_str, n_runners, _ = next_state_key.split('_')
                                     next_re24 = self._get_re24(int(n_outs_str), n_runners)
                                     future_value = self.state_values.get(next_state_key, 0.0)
                                     
@@ -229,8 +232,9 @@ class MDPOptimizer:
         
         forward_counts = ["0-0", "0-1", "1-0", "0-2", "1-1", "2-0", "1-2", "2-1", "3-0", "2-2", "3-1", "3-2"]
         situations = [
-            ("0아웃 주자 없음", "0_000"),
-            ("2아웃 만루", "2_111")
+            ("0아웃 주자 없음 (군집 0)", "0_000_0"),
+            ("2아웃 만루 (군집 2)", "2_111_2"),
+            ("무사 2루 (군집 5)", "0_010_5")
         ]
         
         for sit_name, sit_code in situations:

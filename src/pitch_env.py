@@ -40,20 +40,36 @@ class PitchEnv(gym.Env):
         :param zones            : 투구 존 번호 리스트
         """
         super().__init__()
+        import os
 
         self.transition_model = transition_model
         self.pitch_names = pitch_names
         self.zones = [float(z) for z in zones]
         self.n_pitches = len(pitch_names)
         self.n_zones = len(self.zones)
+        
+        # ── 타자 군집(Cluster) 매핑 데이터 로드 ─────────────────────────────
+        self.batter_clusters = {}
+        csv_path = os.path.join(os.path.dirname(__file__), "..", "data", "batter_clusters_2023.csv")
+        try:
+            if os.path.exists(csv_path):
+                df_clusters = pd.read_csv(csv_path)
+                # {batter_id: cluster_id} 형태로 캐싱
+                self.batter_clusters = dict(zip(df_clusters['batter_id'], df_clusters['cluster']))
+                print(f"[PitchEnv] 타자 군집 데이터 매핑 완료: {len(self.batter_clusters)}명")
+            else:
+                print(f"[PitchEnv] Warning: '{csv_path}' 파일이 없습니다. 모든 타자를 기본 군집(0)으로 간주합니다.")
+        except Exception as e:
+            print(f"[PitchEnv] Error reading cluster csv: {e}. Defaulting to cluster 0.")
 
         # ── 행동 공간: 구종 × 존 (이산) ─────────────────────────────────────
         self.action_space = gym.spaces.Discrete(self.n_pitches * self.n_zones)
 
-        # ── 관측 공간: [balls, strikes, outs, 1b, 2b, 3b] ────────────────────
+        # ── 관측 공간: [balls, strikes, outs, 1b, 2b, 3b, batter_cluster] ─────────
+        # batter_cluster: 0 ~ 7 (총 8개 군집)
         self.observation_space = gym.spaces.Box(
-            low=np.array([0, 0, 0, 0, 0, 0], dtype=np.float32),
-            high=np.array([3, 2, 2, 1, 1, 1], dtype=np.float32),
+            low=np.array([0,  0,  0,  0,  0,  0,  0], dtype=np.float32),
+            high=np.array([3,  2,  2,  1,  1,  1,  7], dtype=np.float32),
             dtype=np.float32,
         )
 
@@ -62,6 +78,8 @@ class PitchEnv(gym.Env):
         self.strikes = 0
         self.outs = 0
         self.runners = [0, 0, 0]  # [1루, 2루, 3루]
+        self.current_batter_id = None
+        self.current_batter_cluster = 0
 
     # ─────────────────────────────────────────────────────────────────────────
     # Gym 인터페이스
@@ -71,12 +89,24 @@ class PitchEnv(gym.Env):
         """
         새 이닝 시작.
         다양한 상황을 균등하게 경험시키기 위해 아웃카운트와 주자 상태를 무작위로 초기화합니다.
+        무작위 타자를 선택하여 현재 이닝의 타자 군집 정보를 세팅합니다.
         """
         super().reset(seed=seed)
         self.balls = 0
         self.strikes = 0
         self.outs = int(self.np_random.integers(0, 3))           # 0, 1, 2 중 하나
         self.runners = list(self.np_random.integers(0, 2, size=3).tolist())  # 각 루 0 or 1
+        
+        # 무작위 타석 시뮬레이션을 위함
+        # 매핑표가 있으면 실제 타자를 픽하고, 아니면 0~7 사이 랜덤값을 부여
+        if self.batter_clusters:
+            batter_ids = list(self.batter_clusters.keys())
+            self.current_batter_id = self.np_random.choice(batter_ids)
+            self.current_batter_cluster = self.batter_clusters.get(self.current_batter_id, 0)
+        else:
+            self.current_batter_id = -1
+            self.current_batter_cluster = int(self.np_random.integers(0, 8))
+            
         return self._get_obs(), {}
 
     def step(self, action: int):
@@ -127,8 +157,11 @@ class PitchEnv(gym.Env):
 
     def _get_obs(self) -> np.ndarray:
         return np.array(
-            [self.balls, self.strikes, self.outs,
-             self.runners[0], self.runners[1], self.runners[2]],
+            [
+                self.balls, self.strikes, self.outs,
+                self.runners[0], self.runners[1], self.runners[2],
+                self.current_batter_cluster
+            ],
             dtype=np.float32,
         )
 
@@ -161,6 +194,7 @@ class PitchEnv(gym.Env):
             ("count_state", count_state),
             ("mapped_pitch_name", pitch),
             ("zone", zone),
+            ("batter_cluster", str(int(self.current_batter_cluster))),
         ]:
             col_name = f"{col_key}_{col_val}"
             if col_name in input_df.columns:

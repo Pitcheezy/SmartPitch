@@ -60,7 +60,7 @@ class PitchDataLoader:
         
         # 필요한 피처와 메타데이터 정의
         features = ['release_speed', 'release_spin_rate', 'pfx_x', 'pfx_z', 'release_pos_x', 'release_pos_z']
-        meta = ['balls', 'strikes', 'outs_when_up', 'on_1b', 'on_2b', 'on_3b', 'description', 'zone']
+        meta = ['balls', 'strikes', 'outs_when_up', 'on_1b', 'on_2b', 'on_3b', 'description', 'zone', 'batter']
         
         # 필요한 컬럼만 추출 후 결측치 제거
         df_processed = df[features + meta].dropna()

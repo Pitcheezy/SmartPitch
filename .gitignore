@@ -23,3 +23,7 @@ test.ipynb
 wandb_test.py
 data_download.py
 
+# --- SmartPitch RL Model Outputs ---
+*.zip
+best_dqn_model/
+wandb/
