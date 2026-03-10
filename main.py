@@ -42,18 +42,20 @@ from src.pitch_env import PitchEnv
 from src.rl_trainer import DQNTrainer
 
 
-def get_pitcher_id(first_name: str, last_name: str) -> int:
-    """pybaseball으로 투수 MLBAM ID 조회"""
-    from pybaseball import playerid_lookup
+def get_pitcher_name_from_id(pitcher_id: int) -> str:
+    """투수 ID로 이름 조회 (W&B 결과 표시용)"""
+    try:
+        from pybaseball import playerid_reverse_lookup
 
-    lookup = playerid_lookup(last_name, first_name)
-    if lookup is None or len(lookup) == 0:
-        raise ValueError(f"투수를 찾을 수 없습니다: {first_name} {last_name}")
-    # 가장 최근 활동한 선수 우선 (key_mlbam 사용)
-    pid = lookup.iloc[0]["key_mlbam"]
-    if pd.isna(pid):
-        raise ValueError(f"MLBAM ID를 찾을 수 없습니다: {first_name} {last_name}")
-    return int(pid)
+        lookup = playerid_reverse_lookup([pitcher_id], key_type="mlbam")
+        if lookup is not None and len(lookup) > 0:
+            first = lookup.iloc[0].get("name_first", "")
+            last = lookup.iloc[0].get("name_last", "")
+            if pd.notna(first) and pd.notna(last):
+                return f"{first} {last}"
+    except Exception:
+        pass
+    return f"Pitcher_{pitcher_id}"
 
 
 def prepare_df_for_model(df_pitcher: pd.DataFrame) -> pd.DataFrame:
@@ -120,6 +122,24 @@ def run_data_pipeline(start_date: str, end_date: str, project_root: Path) -> tup
     log("02 embedding: UMAP·HDBSCAN 클러스터링 중...")
     cfg = EmbeddingConfig()
     df_emb, summary = run_pitcher_umap_cluster(df_clean, cfg)
+
+    # df_emb 비어있으면 (UMAP 피처 NaN으로 전 투수 스킵 시) pitch_type fallback
+    if len(df_emb) == 0 or df_emb.columns.empty:
+        log("  → UMAP 결과 없음 (피처 결측치 과다). pitch_type 기반 fallback 적용")
+        df_emb = df_clean.copy()
+        df_emb["pitch_cluster_local"] = -1
+        df_emb["pitch_cluster_id"] = (
+            df_emb["pitcher"].astype(str) + "_" + df_emb["pitch_type"].fillna("UNK").astype(str)
+        )
+        df_emb["umap_x"] = 0.0
+        df_emb["umap_y"] = 0.0
+        summary = df_emb.groupby("pitcher").size().reset_index(name="n_pitches")
+        summary["did_cluster"] = 0
+        summary["did_umap"] = 0
+        summary["n_clusters"] = 0
+        summary["noise_ratio"] = 0.0
+        summary["note"] = "pitch_type fallback"
+
     save_parquet(df_emb, out_embed)
     summary.to_csv(out_summary, index=False, encoding="utf-8-sig")
     log(f"02 embedding 완료: {out_embed}")
@@ -144,7 +164,7 @@ def run_data_pipeline(start_date: str, end_date: str, project_root: Path) -> tup
     return df_emb, paths.processed_dir
 
 
-def main(player_first_name: str, player_last_name: str, start_date: str, end_date: str) -> None:
+def main(pitcher_id: int, start_date: str, end_date: str) -> None:
     project_root = _proj_root
 
     print("\n[System] 파이프라인 실행을 시작합니다...")
@@ -152,20 +172,21 @@ def main(player_first_name: str, player_last_name: str, start_date: str, end_dat
     print("SmartPitch 파이프라인 실행 시작")
     print("=" * 60)
 
-    # 투수 ID 조회
-    log(f"투수 조회: {player_first_name} {player_last_name}")
-    pitcher_id = get_pitcher_id(player_first_name, player_last_name)
-    log(f"  → MLBAM ID: {pitcher_id}")
+    log(f"분석 대상 투수 ID: {pitcher_id}")
+
+    # W&B 결과 표시용 이름 조회 (선수 ID → 이름)
+    pitcher_display_name = get_pitcher_name_from_id(pitcher_id)
+    log(f"  → W&B 표시명: {pitcher_display_name}")
 
     # -------------------------------------------------------------
-    # 1. W&B 초기화
+    # 1. W&B 초기화 (결과에만 이름 표시)
     # -------------------------------------------------------------
     run = wandb.init(
         project="SmartPitch-Portfolio",
-        name=f"{player_first_name.capitalize()}_{player_last_name.capitalize()}_Pipeline",
+        name=f"{pitcher_display_name.replace(' ', '_')}_Pipeline",
         config={
-            "pitcher": f"{player_first_name} {player_last_name}",
             "pitcher_id": pitcher_id,
+            "pitcher_name": pitcher_display_name,
             "season": start_date[:4],
             "model_type": "PyTorch MLP",
             "epochs": 5,
@@ -201,7 +222,7 @@ def main(player_first_name: str, player_last_name: str, start_date: str, end_dat
             df_pitcher["pitch_cluster_local"] = -1
             if len(df_pitcher) == 0:
                 raise ValueError(
-                    f"해당 기간에 투수 {player_first_name} {player_last_name} (ID={pitcher_id})의 투구 데이터가 없습니다. "
+                    f"해당 기간에 투수 ID={pitcher_id} ({pitcher_display_name})의 투구 데이터가 없습니다. "
                     "기간을 넓히거나 다른 투수를 선택하세요."
                 )
         log(f"  → 해당 투수 투구 수: {len(df_pitcher):,}")
@@ -317,16 +338,14 @@ if __name__ == "__main__":
     print("=" * 60)
     print("\n[데이터 수집 안내]")
     print("- 메이저리그 스탯캐스트(Statcast) 트래킹 데이터 기반입니다.")
-    print("- 권장 데이터 기간: 2015년 ~ 2024년 정규시즌 (2015년 이전은 결측치가 많을 수 있습니다.)")
-    print("\n[🎯 AI 성능 테스트를 위한 추천 투수 3인방]")
-    print("1. Gerrit Cole   : 4구종(직구/슬/커/체)을 바탕으로 한 정석적인 투구 정책 베이스라인 테스트")
-    print("2. Yu Darvish    : 10개 이상의 다양한 구종을 던지는 투수의 한계 군집화(Clustering) 테스트")
-    print("3. Clayton Kershaw: 좌완 레전드의 예리한 슬라이더가 RE24 실점 억제에 미치는 영향 분석")
+    print("- 투수 ID(MLBAM): Statcast pitcher 컬럼 값 (예: Gerrit Cole=543037)")
+    print("- 권장 데이터 기간: 2015년 ~ 2024년 정규시즌")
+    print("\n[🎯 추천 투수 ID (MLBAM)]")
+    print("  Gerrit Cole: 543037 | Yu Darvish: 506433 | Clayton Kershaw: 477132")
     print("\n" + "-" * 60)
 
-    player_name = input("▶ 분석할 투수의 영문 이름을 입력하세요 (기본값: Gerrit Cole): ").strip()
-    if not player_name:
-        player_name = "Gerrit Cole"
+    pitcher_id_str = input("▶ 분석할 투수의 MLBAM ID를 입력하세요 (기본값: 543037): ").strip()
+    pitcher_id = int(pitcher_id_str) if pitcher_id_str else 543037
 
     start_date = input("▶ 데이터 시작일을 입력하세요 (기본값: 2019-03-28): ").strip()
     if not start_date:
@@ -336,12 +355,4 @@ if __name__ == "__main__":
     if not end_date:
         end_date = "2019-09-29"
 
-    name_parts = player_name.split()
-    if len(name_parts) >= 2:
-        player_first_name = name_parts[0]
-        player_last_name = " ".join(name_parts[1:])
-    else:
-        player_first_name = player_name
-        player_last_name = ""
-
-    main(player_first_name, player_last_name, start_date, end_date)
+    main(pitcher_id, start_date, end_date)
