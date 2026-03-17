@@ -245,7 +245,8 @@ class DQNTrainer:
 
         for balls in range(4):
             for strikes in range(3):
-                obs = np.array([balls, strikes, 0, 0, 0, 0], dtype=np.float32)
+                # 7차원(balls, strikes, outs, 1b, 2b, 3b, batter_cluster) 더미 배열
+                obs = np.array([balls, strikes, 0, 0, 0, 0, 0], dtype=np.float32)
                 action, _ = self.model.predict(obs, deterministic=True)
                 label = env.action_to_label(int(action))
                 pitch, zone = label.split(" / ")

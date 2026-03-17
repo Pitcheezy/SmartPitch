@@ -13,9 +13,9 @@
 ## 현재 작업 진행도
 1. 투수 구종 군집화 (완료): 투수의 과거 투구 데이터를 UMAP + K-Means로 줄여 동적으로 구종을 식별 (`src/clustering.py`).
 2. 타자 타격 어프로치 군집화 (완료): 
-   - 좌/우타 타석 분리 후 8가지 타격 특성 지표(Whiff%, Zone Contact, O-Swing 등) 추출.
+   - 좌/우타 타석 분리 후 8가지 타격 특성 지표(Whiff%, Zone Contact, O-Swing 등) 추출 (파울 제외 타구 속도/발사각 적용).
    - 2023시즌(500구 이상 타자) UMAP + K-Means (K=8) 적용.
-   - 타자 군집화(K=8) CSV 추출 완료 및 `pitch_env.py` 상태 공간 확장 완료.
+   - 타자 군집화(K=8) CSV 추출 완료 및 `pitch_env.py` 상태 공간 확장 완료(State 2304개).
 3. 전이 확률 모델 (진행 완료): `batter_cluster` 변수를 입력 특성에 추가 및 학습/MDP 호환성 전체 파이프라인 개조.
 
 ## 다음 목표 (Next Step)

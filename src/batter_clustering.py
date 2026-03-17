@@ -1,9 +1,8 @@
 import pandas as pd
 import numpy as np
+import wandb
 import umap
 import plotly.express as px
-import plotly.graph_objects as go
-import wandb
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
@@ -58,10 +57,6 @@ class BatterClustering:
         
         # 해당 타석 방향 데이터 필터링 (결측치 제거)
         df_side = df[df['stand'] == stand].copy()
-        
-        # 타자 이름용 컬럼 (player_name이 보통 "Last, First" 형태임)
-        if 'player_name' not in df_side.columns:
-            df_side['player_name'] = df_side['batter'].astype(str)
 
         # 1. 500구 이상 필터링
         pitch_counts = df_side['batter'].value_counts()
@@ -117,6 +112,10 @@ class BatterClustering:
         df_side['cnt_hit_into_play'] = is_hit_into_play
         df_side['cnt_barrel'] = is_barrel
         
+        # 인플레이 타구(BBE) 전용 타구 속도 및 각도 (나머지는 NaN 처리하여 평균에서 제외)
+        df_side['bbe_launch_speed'] = np.where(df_side['description'] == 'hit_into_play', df_side['launch_speed'], np.nan)
+        df_side['bbe_launch_angle'] = np.where(df_side['description'] == 'hit_into_play', df_side['launch_angle'], np.nan)
+        
         # 3. Groupby Aggregation (루프 1초 컷 최적화)
         agg_funcs = {
             'cnt_swing': 'sum',
@@ -130,10 +129,11 @@ class BatterClustering:
             'cnt_high_ff_whiff': 'sum',
             'cnt_hit_into_play': 'sum',
             'cnt_barrel': 'sum',
-            'launch_angle': 'mean' # NaN이 무시되며 자동으로 평균을 계산
+            'bbe_launch_angle': 'mean', # NaN이 무시되며 자동으로 평균을 계산
+            'bbe_launch_speed': 'mean'
         }
         
-        grouped = df_side.groupby(['batter', 'player_name']).agg(agg_funcs).reset_index()
+        grouped = df_side.groupby(['batter']).agg(agg_funcs).reset_index()
         
         # 4. 비율(Pct) 수식 벡터 연산 (0나누기 방지 위해 np.where 또는 div 사용)
         def safe_div(num, den):
@@ -143,18 +143,20 @@ class BatterClustering:
         grouped['z_contact_pct'] = safe_div(grouped['cnt_z_contact'], grouped['cnt_z_swing'])
         grouped['o_swing_pct'] = safe_div(grouped['cnt_o_swing'], grouped['cnt_out_zone'])
         grouped['o_contact_pct'] = safe_div(grouped['cnt_o_contact'], grouped['cnt_o_swing'])
-        grouped['avg_launch_angle'] = grouped['launch_angle']
+        grouped['avg_launch_angle'] = grouped['bbe_launch_angle']
+        grouped['avg_launch_speed'] = grouped['bbe_launch_speed']
         grouped['barrel_pct'] = safe_div(grouped['cnt_barrel'], grouped['cnt_hit_into_play'])
         grouped['pull_pct'] = 0.40 # TODO: 정확한 Pull% 계산 로직 대체
         grouped['high_ff_whiff_pct'] = safe_div(grouped['cnt_high_ff_whiff'], grouped['cnt_high_ff_swing'])
         
         # 컬럼 정리 및 fillna
-        features_df = grouped[['batter', 'player_name', 'whiff_pct', 'z_contact_pct', 'o_swing_pct', 
-                               'o_contact_pct', 'avg_launch_angle', 'barrel_pct', 'pull_pct', 'high_ff_whiff_pct']].copy()
+        features_df = grouped[['batter', 'whiff_pct', 'z_contact_pct', 'o_swing_pct', 
+                               'o_contact_pct', 'avg_launch_angle', 'avg_launch_speed', 'barrel_pct', 'pull_pct', 'high_ff_whiff_pct']].copy()
         
         features_df = features_df.rename(columns={'batter': 'batter_id'})
         features_df = features_df.fillna(0)
         
+
         elapsed_time = time.time() - start_time
         print(f" -> 벡터화 피처 추출 완료 (소요시간: {elapsed_time:.2f}초)")
         
@@ -173,7 +175,7 @@ class BatterClustering:
             
         # 1. StandardScaler 전처리
         feature_cols = ['whiff_pct', 'z_contact_pct', 'o_swing_pct', 'o_contact_pct', 
-                        'avg_launch_angle', 'barrel_pct', 'pull_pct', 'high_ff_whiff_pct']
+                        'avg_launch_angle', 'avg_launch_speed', 'barrel_pct', 'pull_pct', 'high_ff_whiff_pct']
                         
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(features_df[feature_cols])
@@ -198,7 +200,7 @@ class BatterClustering:
         features_df['cluster'] = labels
         self.batter_features[stand] = features_df
         return k
-        
+
     def log_interactive_scatter_to_wandb(self, stand: str):
         """
         Plotly를 사용하여 인터랙티브 2D 산점도를 그리고 W&B에 로깅 (hover data에 player_name 포함)
@@ -217,7 +219,7 @@ class BatterClustering:
             x='umap_1', 
             y='umap_2', 
             color='Cluster_Label',
-            hover_data=['player_name', 'whiff_pct', 'avg_launch_angle', 'high_ff_whiff_pct'],
+            hover_data=['batter_id', 'whiff_pct', 'avg_launch_angle', 'avg_launch_speed', 'high_ff_whiff_pct'],
             title=f"UMAP Projection of Batter Approaches ({stand}HB, K=8)",
             color_discrete_sequence=px.colors.qualitative.Set1
         )
@@ -229,12 +231,14 @@ class BatterClustering:
         )
         
         if wandb.run:
-            # W&B에 Plotly 객체 그대로 전송 (인터랙티브 기능 유지)
-            wandb.log({f"Batter_Clustering_{stand}HB": wandb.Html(fig.to_html())})
+            # W&B에 Plotly 객체 직접 전송 (인터랙티브 대시보드 그래프 표시)
+            wandb.log({f"Batter_Clustering_{stand}HB": fig})
             print(f" -> W&B 대시보드에 [{stand}HB] 산점도 로깅 완료!")
         else:
             print(" -> W&B run이 비활성화됨. Html 파일로 임시 저장합니다.")
             fig.write_html(f"batter_clustering_{stand}hb_temp.html")
+
+
 
     def run_clustering_pipeline(self) -> dict:
         """
@@ -248,7 +252,6 @@ class BatterClustering:
         # 1. 특성 추출 (좌타, 우타 분리)
         self._extract_batter_features(self.raw_df, stand='L')
         self._extract_batter_features(self.raw_df, stand='R')
-        
         # 2. UMAP & K-Means 및 로깅 (좌타)
         if self.batter_features['L'] is not None and not self.batter_features['L'].empty:
             self._apply_umap_kmeans('L')
@@ -273,7 +276,7 @@ class BatterClustering:
             
         if merged_dfs:
             final_df = pd.concat(merged_dfs, ignore_index=True)
-            export_df = final_df[['batter_id', 'player_name', 'stand', 'cluster']]
+            export_df = final_df[['batter_id', 'stand', 'cluster']]
             
             # data/ 폴더 (사전에 생성되었다고 가정)에 저장
             csv_path = "data/batter_clusters_2023.csv"
@@ -303,7 +306,7 @@ if __name__ == "__main__":
     # 타자 군집(K=8) 특성 확인용 터미널 출력
     if results.get('RHB_features') is not None and not results['RHB_features'].empty:
         print("\n=== 우타자(RHB) 타격 어프로치 중심(Centroid) 프로필 ===")
-        metrics = ['whiff_pct', 'z_contact_pct', 'o_swing_pct', 'avg_launch_angle', 'barrel_pct', 'high_ff_whiff_pct']
+        metrics = ['whiff_pct', 'z_contact_pct', 'o_swing_pct', 'avg_launch_angle', 'avg_launch_speed', 'barrel_pct', 'high_ff_whiff_pct']
         cluster_summary = results['RHB_features'].groupby('cluster')[metrics].mean().round(3)
         print(cluster_summary)
         print("====================================================\n")
