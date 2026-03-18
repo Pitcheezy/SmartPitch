@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import numpy as np
 import pandas as pd
+from src.preprocess import EVENT_TO_GROUP, DESC_TO_GROUP
 
 
 @dataclass(frozen=True)
@@ -24,14 +25,6 @@ def _ensure_labels(dfp: pd.DataFrame) -> pd.DataFrame:
     if "events_group" in dfp.columns:
         dfp["label_events_group"] = dfp["events_group"].fillna("other")
     elif "events" in dfp.columns:
-        EVENT_TO_GROUP = {
-            "single": "hit", "double": "hit", "triple": "hit", "home_run": "hit",
-            "walk": "walk", "intent_walk": "walk", "hit_by_pitch": "walk",
-            "strikeout": "out", "strikeout_double_play": "out",
-            "field_out": "out", "force_out": "out", "double_play": "out",
-            "grounded_into_double_play": "out",
-            "field_error": "reached",
-        }
         dfp["label_events_group"] = dfp["events"].map(EVENT_TO_GROUP).fillna("other")
     else:
         dfp["label_events_group"] = "other"
@@ -40,22 +33,6 @@ def _ensure_labels(dfp: pd.DataFrame) -> pd.DataFrame:
     if "description_group" in dfp.columns:
         dfp["label_desc_group"] = dfp["description_group"].fillna("other")
     elif "description" in dfp.columns:
-        DESC_TO_GROUP = {
-            "called_strike": "strike",
-            "swinging_strike": "strike",
-            "swinging_strike_blocked": "strike",
-            "missed_bunt": "strike",
-            "foul": "foul",
-            "foul_tip": "foul",
-            "foul_bunt": "foul",
-            "ball": "ball",
-            "blocked_ball": "ball",
-            "pitchout": "ball",
-            "intent_ball": "ball",
-            "hit_into_play": "inplay",
-            "hit_into_play_score": "inplay",
-            "hit_into_play_no_out": "inplay",
-        }
         dfp["label_desc_group"] = dfp["description"].map(DESC_TO_GROUP).fillna("other")
     else:
         dfp["label_desc_group"] = "other"
@@ -85,8 +62,11 @@ def build_matchup_tables(
         raise KeyError(f"Missing columns for matchup: {missing}")
 
     dfp = dfp.copy()
-    dfp["pitcher"] = pd.to_numeric(dfp["pitcher"], errors="coerce").astype(int)
-    dfp["batter"] = pd.to_numeric(dfp["batter"], errors="coerce").astype(int)
+    dfp["pitcher"] = pd.to_numeric(dfp["pitcher"], errors="coerce")
+    dfp["batter"] = pd.to_numeric(dfp["batter"], errors="coerce")
+    dfp = dfp.dropna(subset=["pitcher", "batter"]).copy()
+    dfp["pitcher"] = dfp["pitcher"].astype(int)
+    dfp["batter"] = dfp["batter"].astype(int)
 
     # pitch-level base features
     base_pitch_features = [

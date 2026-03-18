@@ -34,11 +34,15 @@ def build_pitcher_profiles(dfp: pd.DataFrame, summary: pd.DataFrame) -> pd.DataF
         raise KeyError(f"Missing required columns in pitch_umap_cluster: {missing}")
 
     dfp = dfp.copy()
-    dfp["pitcher"] = pd.to_numeric(dfp["pitcher"], errors="coerce").astype(int)
+    dfp["pitcher"] = pd.to_numeric(dfp["pitcher"], errors="coerce")
+    dfp = dfp.dropna(subset=["pitcher"]).copy()
+    dfp["pitcher"] = dfp["pitcher"].astype(int)
 
     summary = summary.copy()
     if "pitcher" in summary.columns:
-        summary["pitcher"] = pd.to_numeric(summary["pitcher"], errors="coerce").astype(int)
+        summary["pitcher"] = pd.to_numeric(summary["pitcher"], errors="coerce")
+        summary = summary.dropna(subset=["pitcher"]).copy()
+        summary["pitcher"] = summary["pitcher"].astype(int)
     else:
         summary["pitcher"] = []
 
@@ -146,7 +150,9 @@ def build_batter_profiles(dfp: pd.DataFrame) -> pd.DataFrame:
         raise KeyError(f"Missing required columns for batter profiles: {missing}")
 
     dfb = dfp.copy()
-    dfb["batter"] = pd.to_numeric(dfb["batter"], errors="coerce").astype(int)
+    dfb["batter"] = pd.to_numeric(dfb["batter"], errors="coerce")
+    dfb = dfb.dropna(subset=["batter"]).copy()
+    dfb["batter"] = dfb["batter"].astype(int)
 
     # numeric
     num_cols = [c for c in ["launch_speed","launch_angle"] if c in dfb.columns]

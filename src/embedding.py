@@ -81,7 +81,9 @@ def run_pitcher_umap_cluster(df: pd.DataFrame, cfg: EmbeddingConfig) -> tuple[pd
 
     # NaN 제거(UMAP/HDBSCAN NaN 불가)
     df2 = df.dropna(subset=need).copy()
-    df2["pitcher"] = pd.to_numeric(df2["pitcher"], errors="coerce").astype(int)
+    df2["pitcher"] = pd.to_numeric(df2["pitcher"], errors="coerce")
+    df2 = df2.dropna(subset=["pitcher"]).copy()
+    df2["pitcher"] = df2["pitcher"].astype(int)
 
     # 투수 목록
     pitch_counts = df2.groupby("pitcher").size().sort_values(ascending=False)

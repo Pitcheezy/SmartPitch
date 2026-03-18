@@ -98,9 +98,9 @@ def preprocess_statcast(df_raw: pd.DataFrame) -> pd.DataFrame:
     for c in NUM_COLS:
         df[c] = pd.to_numeric(df[c], errors="coerce")
 
-    # 인플레이 아닐 때 NaN → 0
-    df["launch_speed"] = df["launch_speed"].fillna(0.0)
-    df["launch_angle"] = df["launch_angle"].fillna(0.0)
+    # 인플레이 아닐 때 결측치는 0.0으로 덮어쓰지 않고 NaN 유지 (타자 프로필 산출 시 평균 왜곡 방지)
+    # df["launch_speed"] = df["launch_speed"].fillna(0.0)
+    # df["launch_angle"] = df["launch_angle"].fillna(0.0)
 
     # 주자 있으면 1, 없으면 0
     df["on_1b"] = df["on_1b"].notna().astype(int)
