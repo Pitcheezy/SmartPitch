@@ -286,11 +286,15 @@ class TransitionProbabilityModel:
         else:
             print("W&B run이 활성화되어 있지 않아 모델 아티팩트를 업로드할 수 없습니다.")
 
-    def run_modeling_pipeline(self, epochs: int = 50, upload_artifact: bool = True):
+    def run_modeling_pipeline(self, epochs: int = 50, hidden_dims: List[int] = None, upload_artifact: bool = True):
         """
         데이터 준비부터 모델 학습, W&B 로깅 및 아티팩트 업로드까지 일괄 수행
+        hidden_dims가 None이면 train_model() 기본값([128, 64]) 사용
         """
-        self.train_model(epochs=epochs)
+        kwargs = {"epochs": epochs}
+        if hidden_dims is not None:
+            kwargs["hidden_dims"] = hidden_dims
+        self.train_model(**kwargs)
         if upload_artifact:
             self.upload_model_artifact()
             

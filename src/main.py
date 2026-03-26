@@ -152,13 +152,14 @@ def main(player_first_name, player_last_name, start_date, end_date):
         config = wandb.config
         model_module = TransitionProbabilityModel(
             df=df_clustered,
-            batch_size=64,
+            batch_size=256,
             lr=config.learning_rate
         )
         
         # 데이터 분리, MLP 훈련, W&B 메트릭 로깅 및 가장 좋은 모델 가중치(Artifact) 업로드
         model_module.run_modeling_pipeline(
-            epochs=config.epochs, 
+            epochs=config.epochs,
+            hidden_dims=list(config.hidden_dims),
             upload_artifact=True
         )
         
