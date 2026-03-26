@@ -31,6 +31,15 @@ from src.mdp_solver import MDPOptimizer
 from src.pitch_env import PitchEnv
 from src.rl_trainer import DQNTrainer
 
+# ── 범용 전이 모델 사용 여부 ───────────────────────────────────────────────
+# True : universal_model_trainer.py 가 생성한 pre-trained 모델 로드 (권장)
+#         선행 조건: uv run src/universal_model_trainer.py 실행 후
+#                   best_transition_model_universal.pth
+#                   data/feature_columns_universal.json
+#                   data/target_classes_universal.json 존재해야 함
+# False: 단일 투수 데이터로 즉시 재학습 (기존 동작, 파일 없어도 실행 가능)
+USE_UNIVERSAL_MODEL = True
+
 
 def _lookup_pitcher_cluster(pitcher_mlbam_id: int) -> str:
     """
@@ -146,23 +155,31 @@ def main(player_first_name, player_last_name, start_date, end_date):
         print(f"식별된 구종 목록: {identified_pitch_names}")
         
         # -------------------------------------------------------------
-        # 4. 상태 전이 확률 예측 딥러닝 모델 학습 (TransitionProbabilityModel)
+        # 4. 전이 확률 모델 준비 (범용 로드 or 단일 투수 학습)
         # -------------------------------------------------------------
-        print("\n[단계 3] 상태 전이 확률 예측(MLP) 모델 학습")
-        config = wandb.config
-        model_module = TransitionProbabilityModel(
-            df=df_clustered,
-            batch_size=256,
-            lr=config.learning_rate
-        )
-        
-        # 데이터 분리, MLP 훈련, W&B 메트릭 로깅 및 가장 좋은 모델 가중치(Artifact) 업로드
-        model_module.run_modeling_pipeline(
-            epochs=config.epochs,
-            hidden_dims=list(config.hidden_dims),
-            upload_artifact=True
-        )
-        
+        if USE_UNIVERSAL_MODEL:
+            print("\n[단계 3] 범용 전이 확률 모델 로드 (pre-trained on 2023 MLB 전체 데이터)")
+            _root = os.path.join(os.path.dirname(__file__), "..")
+            model_module = TransitionProbabilityModel.load_from_checkpoint(
+                model_path=os.path.join(_root, "best_transition_model_universal.pth"),
+                feature_columns_path=os.path.join(_root, "data", "feature_columns_universal.json"),
+                target_classes_path=os.path.join(_root, "data", "target_classes_universal.json"),
+            )
+        else:
+            print("\n[단계 3] 상태 전이 확률 예측(MLP) 모델 학습 (단일 투수 데이터)")
+            config = wandb.config
+            model_module = TransitionProbabilityModel(
+                df=df_clustered,
+                batch_size=256,
+                lr=config.learning_rate
+            )
+            # 데이터 분리, MLP 훈련, W&B 메트릭 로깅 및 가장 좋은 모델 가중치(Artifact) 업로드
+            model_module.run_modeling_pipeline(
+                epochs=config.epochs,
+                hidden_dims=list(config.hidden_dims),
+                upload_artifact=True
+            )
+
         # MDPOptimizer에 전달할 특징 컬럼과 타겟 클래스, 그리고 존(코스) 정보 추출
         feature_cols = model_module.feature_columns
         target_classes = model_module.target_classes
