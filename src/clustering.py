@@ -1,3 +1,35 @@
+"""
+clustering.py — 개별 투수의 구종 레퍼토리 자동 식별 (UMAP + K-Means)
+
+역할:
+    특정 투수 한 명의 투구 데이터를 입력받아, 구속/회전수/무브먼트 등 물리적 특성으로
+    해당 투수가 실제로 던지는 구종 종류(레퍼토리)를 비지도학습으로 자동 탐지합니다.
+    이후 모든 파이프라인에서 구종 이름(Fastball/Slider 등)의 기준이 됩니다.
+
+입력:
+    data_loader.py가 반환한 전처리 DataFrame (1명의 투수 데이터)
+
+출력:
+    - df['true_pitch_type']: K-Means 군집 번호 (0 ~ best_k-1)
+    - df['mapped_pitch_name']: 평균 구속 순서로 매핑된 구종 이름
+      (가장 빠름→Fastball, 다음→Slider, Changeup, Curveball, Sweeper, Sinker)
+    - W&B에 UMAP 산점도 로깅
+
+알고리즘:
+    1. 6개 물리 피처 StandardScaling
+    2. UMAP(n_components=2) 2차원 압축
+    3. K=3~6 범위에서 실루엣 스코어 최대 K 선택
+    4. 선택된 K로 K-Means 군집화
+    5. 군집별 평균 구속 내림차순으로 구종 이름 매핑
+
+피처 (6개):
+    release_speed, release_spin_rate, pfx_x, pfx_z, release_pos_x, release_pos_z
+
+주의:
+    - 이 클러스터링은 투수 1명 전용 (batter_clustering/pitcher_clustering과 다름)
+    - 구종 이름은 실제 Statcast 구종 코드(FF/SL 등)와 무관하게 속도 순서로 자동 할당됨
+    - K 범위가 3~6이므로 Yu Darvish처럼 7구종 이상 던지는 투수는 정확도 저하
+"""
 import pandas as pd
 import numpy as np
 import umap
