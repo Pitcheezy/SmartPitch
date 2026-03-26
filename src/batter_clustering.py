@@ -1,3 +1,48 @@
+"""
+batter_clustering.py — 2023 MLB 전체 타자 행동 패턴 군집화 (K=8, 독립 실행 스크립트)
+
+역할:
+    2023 시즌 MLB 전체 Statcast 데이터를 수집하여, 타자들을 '타격 어프로치(공략 방식)' 기준으로
+    8가지 유형으로 분류합니다. 결과는 data/batter_clusters_2023.csv에 저장되며,
+    model.py와 pitch_env.py에서 타자 유형(batter_cluster) 피처로 사용됩니다.
+
+좌/우타 분리 이유:
+    좌타(LHB)와 우타(RHB)는 투수가 바라보는 각도, 공의 궤적, 스트라이크존이 다르므로
+    동일한 수치가 다른 의미를 가집니다. 예) o_swing_pct는 좌우타의 아웃존 위치 자체가 다름
+    → 좌우를 섞으면 군집 품질이 낮아짐 → 각각 독립적으로 모델링 후 cluster 번호 0~7 부여
+
+타자 군집화 피처 (9개):
+    whiff_pct       : 스윙 중 헛스윙 비율 (컨택 능력 역지표)
+    z_contact_pct   : 스트라이크존 내 공에 대한 컨택 비율
+    o_swing_pct     : 볼에 대한 스윙 비율 (존 외곽 적극성)
+    o_contact_pct   : 볼에 스윙했을 때 컨택 성공 비율
+    avg_launch_angle: 인플레이 타구의 평균 발사각 (BBE 기준 — 파울/헛스윙 제외)
+    avg_launch_speed: 인플레이 타구의 평균 타구속도 (BBE 기준)
+    barrel_pct      : 인플레이 타구 중 배럴 비율 (완벽한 타격)
+    pull_pct        : 당겨치기 비율 (우타: hc_x<125 / 좌타: hc_x>125)
+    high_ff_whiff_pct: 높은 포심에 대한 헛스윙 비율 (존 1,2,3,11,12 기준)
+
+알고리즘:
+    1. statcast()로 2023 시즌 전체 데이터 수집 (~72만 투구)
+    2. 좌/우타 분리
+    3. 타자별 500구 이상 필터링
+    4. 벡터화 연산(Pandas Groupby)으로 9개 피처 집계 (루프 없음, ~10초)
+    5. StandardScaler → UMAP(2D) 차원 축소
+    6. K=8 고정 K-Means 군집화
+    7. data/batter_clusters_2023.csv 저장 + W&B Artifact 업로드
+
+K=8 고정 이유:
+    실루엣 점수 기반 탐색에서 K=8이 안정적으로 높은 점수를 보였고,
+    8개 군집이 MDP 상태 공간 복잡도(×8배)와 모델 표현력 사이 적절한 균형점
+
+출력 파일: data/batter_clusters_2023.csv
+    컬럼: batter_id (MLBAM ID), stand (L/R), cluster (0~7)
+
+실행 방법:
+    uv run src/batter_clustering.py
+    → 최초 1회 실행 후 캐시 활용 (~10분 → ~1분)
+    → main.py 실행 전에 반드시 먼저 실행해야 함
+"""
 import pandas as pd
 import numpy as np
 import wandb
@@ -6,7 +51,9 @@ import plotly.express as px
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
-from pybaseball import statcast
+from pybaseball import statcast, cache
+
+cache.enable()  # 동일 기간 재요청 시 로컬 캐시 사용 (전 시즌 데이터 중복 다운로드 방지)
 
 class BatterClustering:
     """
@@ -99,6 +146,14 @@ class BatterClustering:
         else:
             is_barrel = (is_hit_into_play.astype(bool) & df_side['launch_angle'].between(26, 30).fillna(False) & (df_side['launch_speed'] >= 98).fillna(False)).fillna(False).astype(int)
 
+        # Pull% 계산: hc_x 좌표 기반 당겨치기 비율
+        # Statcast 좌표계: hc_x=125 ≈ 중앙 / 우타자(R): 좌측(3루방향)이 pull = hc_x < 125
+        #                                  / 좌타자(L): 우측(1루방향)이 pull = hc_x > 125
+        if stand == 'R':
+            is_pull = (is_hit_into_play.astype(bool) & df_side['hc_x'].lt(125).fillna(False)).fillna(False).astype(int)
+        else:
+            is_pull = (is_hit_into_play.astype(bool) & df_side['hc_x'].gt(125).fillna(False)).fillna(False).astype(int)
+
         # 연산에 필요한 요소들을 새로운 컬럼으로 할당
         df_side['cnt_swing'] = is_swing
         df_side['cnt_whiff'] = is_whiff
@@ -111,6 +166,7 @@ class BatterClustering:
         df_side['cnt_high_ff_whiff'] = is_high_ff_whiff
         df_side['cnt_hit_into_play'] = is_hit_into_play
         df_side['cnt_barrel'] = is_barrel
+        df_side['cnt_pull'] = is_pull
         
         # 인플레이 타구(BBE) 전용 타구 속도 및 각도 (나머지는 NaN 처리하여 평균에서 제외)
         df_side['bbe_launch_speed'] = np.where(df_side['description'] == 'hit_into_play', df_side['launch_speed'], np.nan)
@@ -129,6 +185,7 @@ class BatterClustering:
             'cnt_high_ff_whiff': 'sum',
             'cnt_hit_into_play': 'sum',
             'cnt_barrel': 'sum',
+            'cnt_pull': 'sum',
             'bbe_launch_angle': 'mean', # NaN이 무시되며 자동으로 평균을 계산
             'bbe_launch_speed': 'mean'
         }
@@ -146,7 +203,7 @@ class BatterClustering:
         grouped['avg_launch_angle'] = grouped['bbe_launch_angle']
         grouped['avg_launch_speed'] = grouped['bbe_launch_speed']
         grouped['barrel_pct'] = safe_div(grouped['cnt_barrel'], grouped['cnt_hit_into_play'])
-        grouped['pull_pct'] = 0.40 # TODO: 정확한 Pull% 계산 로직 대체
+        grouped['pull_pct'] = safe_div(grouped['cnt_pull'], grouped['cnt_hit_into_play'])
         grouped['high_ff_whiff_pct'] = safe_div(grouped['cnt_high_ff_whiff'], grouped['cnt_high_ff_swing'])
         
         # 컬럼 정리 및 fillna
