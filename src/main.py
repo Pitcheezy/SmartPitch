@@ -95,7 +95,7 @@ def main(player_first_name, player_last_name, start_date, end_date):
             "pitcher": f"{player_first_name} {player_last_name}",
             "season": start_date[:4],
             "model_type": "PyTorch MLP",
-            "epochs": 5,
+            "epochs": 20,
             "hidden_dims": [128, 64],
             "dropout_rate": 0.2,
             "learning_rate": 0.001,
