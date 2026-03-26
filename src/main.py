@@ -122,7 +122,10 @@ def main(player_first_name, player_last_name, start_date, end_date):
         )
         
         # 데이터를 가져오고 전처리한 뒤, 바로 W&B Artifact로 업로드합니다.
-        df_processed = data_loader.load_and_prepare_data(upload_artifact=True, artifact_name="gerrit_cole_raw_pitches")
+        df_processed = data_loader.load_and_prepare_data(
+            upload_artifact=True,
+            artifact_name=f"{player_first_name.lower()}_{player_last_name.lower()}_raw_pitches"
+        )
 
         # 투수 군집 조회: pitcher_clusters_2023.csv에서 해당 투수의 cluster ID 가져오기
         # CSV가 없으면 "0" (기본값) — pitcher_clustering.py를 별도 실행해 CSV 생성 필요
