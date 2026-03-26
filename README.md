@@ -41,15 +41,16 @@ W&B 대시보드 (학습곡선 / UMAP 시각화 / 정책테이블 / 구종분포
 ```
 paper_review/
 ├── src/
-│   ├── main.py                  전체 파이프라인 실행 진입점
-│   ├── data_loader.py           Statcast 데이터 수집 + 전처리
-│   ├── clustering.py            투수별 구종 식별 (UMAP + K-Means)
-│   ├── batter_clustering.py     타자 유형 군집화 (K=8, 독립 실행용)
-│   ├── pitcher_clustering.py    투수 유형 군집화 (K=4, 독립 실행용)
-│   ├── model.py                 전이 확률 예측 MLP 학습
-│   ├── mdp_solver.py            MDP 가치반복 최적 정책 계산
-│   ├── pitch_env.py             Gymnasium RL 환경
-│   └── rl_trainer.py            DQN 에이전트 학습/평가
+│   ├── main.py                      전체 파이프라인 실행 진입점
+│   ├── data_loader.py               Statcast 데이터 수집 + 전처리
+│   ├── clustering.py                투수별 구종 식별 (UMAP + K-Means)
+│   ├── batter_clustering.py         타자 유형 군집화 (K=8, 독립 실행용)
+│   ├── pitcher_clustering.py        투수 유형 군집화 (K=4, 독립 실행용)
+│   ├── universal_model_trainer.py   범용 전이 모델 학습 (2023 MLB 전체, 독립 실행용)
+│   ├── model.py                     전이 확률 예측 MLP 학습
+│   ├── mdp_solver.py                MDP 가치반복 최적 정책 계산
+│   ├── pitch_env.py                 Gymnasium RL 환경
+│   └── rl_trainer.py                DQN 에이전트 학습/평가
 ├── data/
 │   ├── batter_clusters_2023.csv 타자 군집 매핑 (batter_id → cluster 0~7)
 │   └── pitcher_clusters_2023.csv투수 군집 매핑 (pitcher_id → cluster 0~3)
@@ -88,14 +89,22 @@ uv run python -c "import torch; print('CUDA:', torch.cuda.is_available())"
 ### 실행 순서
 
 ```bash
-# [선행 작업] 군집화 CSV 생성 — 최초 1회만 실행, 이후 캐시 활용
+# [선행 작업 1] 군집화 CSV 생성 — 최초 1회만 실행, 이후 캐시 활용
 uv run src/batter_clustering.py   # → data/batter_clusters_2023.csv (타자 K=8)
 uv run src/pitcher_clustering.py  # → data/pitcher_clusters_2023.csv (투수 K=4)
+
+# [선행 작업 2] 범용 전이 모델 학습 — 최초 1회만 실행 (약 20~40분)
+# 또는 W&B Artifact "universal_transition_mlp"에서 다운로드
+uv run src/universal_model_trainer.py
+# → best_transition_model_universal.pth
+# → data/feature_columns_universal.json
+# → data/target_classes_universal.json
 
 # [메인 파이프라인] 특정 투수 분석 + DQN 학습
 uv run src/main.py
 # 실행 후 투수 이름과 시즌을 입력
 # 예) Clayton Kershaw / 2024-03-20 ~ 2024-09-30
+# main.py 상단의 USE_UNIVERSAL_MODEL=True 시 범용 모델 사용 (권장)
 ```
 
 ### W&B 로그인 (최초 1회)
@@ -156,9 +165,10 @@ MDP 상태 키 형식 (문자열):
 ```
 우선순위  항목
 ─────────────────────────────────────────────────────────────
-[Critical] 범용 전이 모델 학습 (현재는 단일 투수 데이터)
-           → 전체 MLB 데이터로 model.py 재학습 필요
-[High]     MLP epochs 5 → 20~30으로 증가 (현재 val_acc 47%)
+[완료]     범용 전이 모델 학습 (universal_model_trainer.py)
+           → uv run src/universal_model_trainer.py 또는 W&B Artifact 다운로드
+           → best_transition_model_universal.pth (gitignore 대상, W&B Artifact로 관리)
+[완료]     MLP epochs 5 → 20 (batch_size 64 → 256)
 [High]     RE24 매트릭스 연도별 갱신 (현재 2019 고정)
 [Medium]   batted ball 확률 단순화 (70/15/10/5%) → 실제 데이터 기반
 [Medium]   DQN timesteps 300K → 500K+, exploration 0.3 → 0.4

@@ -42,6 +42,7 @@ paper_review/
 │   ├── clustering.py            단일 투수 구종 레퍼토리 식별 (UMAP+KMeans)
 │   ├── batter_clustering.py     2023 MLB 전체 타자 군집화 (독립 실행 스크립트)
 │   ├── pitcher_clustering.py    2023 MLB 전체 투수 군집화 (독립 실행 스크립트)
+│   ├── universal_model_trainer.py 2023 MLB 전체 데이터 범용 MLP 학습 (독립 실행 스크립트)
 │   ├── model.py                 투구 결과 전이 확률 예측 PyTorch MLP
 │   ├── mdp_solver.py            MDP 가치반복(Value Iteration) 최적 정책 계산
 │   ├── pitch_env.py             Gymnasium 커스텀 환경 (이닝 단위 시뮬레이션)
@@ -51,8 +52,11 @@ paper_review/
 │   ├── batter_clusters_2023.csv batter_clustering.py 실행 결과
 │   └── pitcher_clusters_2023.csv pitcher_clustering.py 실행 결과
 │
-├── fetch_wandb_run.py           W&B 런 데이터 로컬 추출 유틸리티
-├── best_transition_model.pth    학습된 MLP 가중치 (gitignored *.pth)
+├── fetch_wandb_run.py                   W&B 런 데이터 로컬 추출 유틸리티
+├── best_transition_model.pth            단일 투수 MLP 가중치 (gitignored *.pth)
+├── best_transition_model_universal.pth  범용 MLP 가중치 (gitignored *.pth)
+│                                        → uv run src/universal_model_trainer.py 로 생성
+│                                        → 또는 W&B Artifact "universal_transition_mlp" 에서 다운로드
 ├── best_dqn_model/              EvalCallback 최고 DQN 체크포인트 (gitignored)
 ├── smartpitch_dqn_final.zip     최종 DQN 모델 (gitignored *.zip)
 │
@@ -66,7 +70,10 @@ paper_review/
 ```
 
 > **gitignored 주의**: `data/*.csv`, `*.pth`, `*.zip`, `wandb/`, `best_dqn_model/`는 git 추적 안 됨.
-> 팀원이 클론 후 직접 `uv run src/batter_clustering.py` / `uv run src/pitcher_clustering.py`를 실행해야 함.
+> 팀원이 클론 후 아래 순서로 실행해야 함:
+> 1. `uv run src/batter_clustering.py` / `uv run src/pitcher_clustering.py`
+> 2. `uv run src/universal_model_trainer.py` (범용 모델 생성, 약 20~40분)
+>    또는 W&B Artifact `universal_transition_mlp`에서 3개 파일 수동 다운로드
 
 ---
 
@@ -198,8 +205,10 @@ uv sync
 uv pip install torch --index-url https://download.pytorch.org/whl/cu124  # GPU만
 
 # 선행 작업 (최초 1회 또는 데이터 갱신 시)
-uv run src/batter_clustering.py    # ~10분, 캐시 이후 ~1분 → data/batter_clusters_2023.csv
-uv run src/pitcher_clustering.py   # ~3분, 캐시 이후 ~30초 → data/pitcher_clusters_2023.csv
+uv run src/batter_clustering.py      # ~10분, 캐시 이후 ~1분 → data/batter_clusters_2023.csv
+uv run src/pitcher_clustering.py     # ~3분, 캐시 이후 ~30초 → data/pitcher_clusters_2023.csv
+uv run src/universal_model_trainer.py # ~20~40분 → best_transition_model_universal.pth
+                                      # 또는 W&B Artifact "universal_transition_mlp"에서 다운로드
 
 # 메인 파이프라인 실행
 uv run src/main.py                 # 투수 이름, 날짜 입력 프롬프트 표시
