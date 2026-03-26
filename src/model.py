@@ -98,6 +98,54 @@ class TransitionProbabilityModel:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"사용 기기: {self.device}")
 
+    @classmethod
+    def load_from_checkpoint(
+        cls,
+        model_path: str,
+        feature_columns_path: str,
+        target_classes_path: str,
+    ) -> "TransitionProbabilityModel":
+        """
+        저장된 가중치(.pth) / 특징 컬럼(.json) / 결과 클래스(.json)를 로드하여
+        추론 전용 인스턴스를 반환합니다.
+
+        universal_model_trainer.py 가 생성한 아래 세 파일을 main.py에서
+        USE_UNIVERSAL_MODEL=True 로 사용할 때 호출됩니다.
+
+            best_transition_model_universal.pth
+            data/feature_columns_universal.json
+            data/target_classes_universal.json
+
+        :param model_path:           .pth 파일 절대/상대 경로
+        :param feature_columns_path: feature_columns_universal.json 경로
+        :param target_classes_path:  target_classes_universal.json 경로
+        :return: model.eval() 상태의 TransitionProbabilityModel 인스턴스
+        """
+        import json
+
+        # 빈 DataFrame으로 인스턴스 생성 — _prepare_data() 호출 없이 추론만 사용
+        instance = cls(df=pd.DataFrame(), batch_size=256)
+
+        with open(feature_columns_path, 'r', encoding='utf-8') as f:
+            instance.feature_columns = json.load(f)
+        with open(target_classes_path, 'r', encoding='utf-8') as f:
+            instance.target_classes = json.load(f)
+
+        # LabelEncoder 재구성 — predict_proba 후 클래스 이름 조회에 사용
+        instance.label_encoder.classes_ = np.array(instance.target_classes)
+
+        input_dim  = len(instance.feature_columns)
+        output_dim = len(instance.target_classes)
+
+        instance.model = MLP(input_dim, output_dim).to(instance.device)
+        instance.model.load_state_dict(
+            torch.load(model_path, map_location=instance.device, weights_only=True)
+        )
+        instance.model.eval()
+
+        print(f"[UniversalModel] 로드 완료 — input_dim={input_dim}, output_dim={output_dim}")
+        return instance
+
     def _prepare_data(self) -> Tuple[DataLoader, DataLoader, int, int]:
         """
         [내부 메서드] X(One-Hot Encoding)와 y(Label Encoding)를 만들고
