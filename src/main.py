@@ -1,17 +1,78 @@
+"""
+main.py — SmartPitch 전체 파이프라인 오케스트레이터
+
+실행 방법:
+    uv run src/main.py
+
+파이프라인 순서:
+    1. 데이터 수집 (data_loader)     : Statcast API → 단일 투수 투구 데이터
+    2. 구종 식별  (clustering)       : UMAP+KMeans → 구종 레퍼토리 자동 매핑
+    3. 모델 학습  (model)            : MLP → 투구 결과 전이 확률 예측
+    4. MDP 최적화 (mdp_solver)       : 가치반복 → 상태별 최적 구종/코스 정책
+    5. RL 학습    (pitch_env + rl)   : DQN → 에이전트 학습
+    6. W&B 로깅                      : 메트릭/모델/정책 대시보드 업로드
+
+사전 조건 (최초 1회 실행 필요):
+    uv run src/batter_clustering.py   → data/batter_clusters_2023.csv
+    uv run src/pitcher_clustering.py  → data/pitcher_clusters_2023.csv
+    두 CSV가 없으면 군집 ID "0"으로 fallback되어 실행은 되지만 정확도 저하
+"""
 import wandb
 import os
 import sys
 
-# src 패키지를 인식할 수 있도록 프로젝트 루트 경로를 sys.path에 추가합니다.
+# uv run src/main.py 형태로 실행할 때 src 패키지 경로를 인식하게 함
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# 생성한 모듈 불러오기
 from src.data_loader import PitchDataLoader
 from src.clustering import PitchClustering
 from src.model import TransitionProbabilityModel
 from src.mdp_solver import MDPOptimizer
 from src.pitch_env import PitchEnv
 from src.rl_trainer import DQNTrainer
+
+
+def _lookup_pitcher_cluster(pitcher_mlbam_id: int) -> str:
+    """
+    data/pitcher_clusters_2023.csv에서 해당 투수의 군집 ID(0~K-1)를 조회합니다.
+
+    pitcher_clustering.py 실행 후 생성된 CSV를 사용합니다.
+    현재 K=4: 0=파워 패스트볼/슬라이더, 1=핀세스/커맨드, 2=무브먼트/싱커, 3=멀티피치
+
+    CSV 없거나 투수가 목록에 없으면 "0" 반환 (2023 시즌 데이터 없는 투수 등)
+    """
+    import pandas as pd
+    csv_path = os.path.join(os.path.dirname(__file__), "..", "data", "pitcher_clusters_2023.csv")
+    try:
+        if os.path.exists(csv_path):
+            df = pd.read_csv(csv_path)
+            row = df[df['pitcher_id'] == pitcher_mlbam_id]
+            if not row.empty:
+                return str(int(row['cluster'].values[0]))
+    except Exception:
+        pass
+    return "0"
+
+
+def _get_all_pitcher_clusters() -> list:
+    """
+    data/pitcher_clusters_2023.csv에 존재하는 모든 투수 군집 ID를 정렬된 문자열 리스트로 반환합니다.
+    MDPOptimizer의 pitcher_clusters 파라미터로 전달됩니다.
+
+    예: ["0", "1", "2", "3"]  (K=4인 경우)
+
+    CSV 없으면 ["0"] 반환 → MDP 상태 수 = 2,304개 (단일 군집 fallback)
+    CSV 있으면 K개 군집 → MDP 상태 수 = 2,304 × K개
+    """
+    import pandas as pd
+    csv_path = os.path.join(os.path.dirname(__file__), "..", "data", "pitcher_clusters_2023.csv")
+    try:
+        if os.path.exists(csv_path):
+            df = pd.read_csv(csv_path)
+            return [str(c) for c in sorted(df['cluster'].unique())]
+    except Exception:
+        pass
+    return ["0"]
 
 def main(player_first_name, player_last_name, start_date, end_date):
     import sys
@@ -62,7 +123,14 @@ def main(player_first_name, player_last_name, start_date, end_date):
         
         # 데이터를 가져오고 전처리한 뒤, 바로 W&B Artifact로 업로드합니다.
         df_processed = data_loader.load_and_prepare_data(upload_artifact=True, artifact_name="gerrit_cole_raw_pitches")
-        
+
+        # 투수 군집 조회: pitcher_clusters_2023.csv에서 해당 투수의 cluster ID 가져오기
+        # CSV가 없으면 "0" (기본값) — pitcher_clustering.py를 별도 실행해 CSV 생성 필요
+        pitcher_cluster_id = _lookup_pitcher_cluster(data_loader.pitcher_mlbam_id)
+        pitcher_clusters_for_mdp = _get_all_pitcher_clusters()
+        print(f"[투수 군집] {player_first_name} {player_last_name}: cluster={pitcher_cluster_id} "
+              f"(전체 투수 군집: {pitcher_clusters_for_mdp})")
+
         # -------------------------------------------------------------
         # 3. UMAP 및 K-Means 구종 동적 식별 (PitchClustering)
         # -------------------------------------------------------------
@@ -105,7 +173,8 @@ def main(player_first_name, player_last_name, start_date, end_date):
             feature_columns=feature_cols,
             target_classes=target_classes,
             pitch_names=identified_pitch_names,
-            zones=strike_zones
+            zones=strike_zones,
+            pitcher_clusters=pitcher_clusters_for_mdp,
         )
 
         # 가치 반복 계산 및 W&B Table에 결과 로깅
@@ -117,15 +186,18 @@ def main(player_first_name, player_last_name, start_date, end_date):
         print("\n[단계 5] DQN Model-Free 강화학습 에이전트 학습")
 
         # 환경 생성 (학습용 / 평가용 각각)
+        # pitcher_cluster=int(pitcher_cluster_id): 단일 투수 모드로 고정
         train_env = PitchEnv(
             transition_model=model_module,
             pitch_names=identified_pitch_names,
             zones=strike_zones,
+            pitcher_cluster=int(pitcher_cluster_id),
         )
         eval_env = PitchEnv(
             transition_model=model_module,
             pitch_names=identified_pitch_names,
             zones=strike_zones,
+            pitcher_cluster=int(pitcher_cluster_id),
         )
 
         dqn_config = wandb.config

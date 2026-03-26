@@ -1,3 +1,41 @@
+"""
+mdp_solver.py — MDP 가치반복(Value Iteration) 기반 최적 투구 전략 계산
+
+역할:
+    학습된 MLP(model.py)를 이용해 각 게임 상황에서 기대 실점(RE24)을 최소화하는
+    최적 구종+코스 정책(Policy)을 계산합니다.
+
+상태 공간:
+    상태 키 형식: "{count}_{outs}_{runners}_{batter_cluster}_{pitcher_cluster}"
+    예시: "3-2_2_111_7_0"
+      - count     = "3-2"      볼-스트라이크 (볼0~3, 스트라이크0~2)
+      - outs      = "2"        아웃 수 (0~2)
+      - runners   = "111"      주자 상태 (1루/2루/3루, 각 0 또는 1)
+      - batter_cl = "7"        타자 군집 (0~7)
+      - pitcher_cl= "0"        투수 군집 (0~K-1, 현재 K=4)
+
+    총 상태 수: 12 × 3 × 8 × 8 × K
+      - 단일 투수 모드 (K=1): 2,304개
+      - 범용 모드     (K=4): 9,216개
+
+행동 공간:
+    (구종 수) × (코스 수 14) 개의 이산 행동
+    예: 4구종 × 14코스 = 56가지 행동
+
+보상 함수:
+    reward = RE24_before - RE24_after - runs_scored
+    양수: 투수가 기대 실점을 줄임 (좋음)
+    음수: 기대 실점이 증가하거나 실점 발생 (나쁨)
+
+RE24 매트릭스:
+    2019 MLB 평균 기대 득점 (아웃수_주자상태 → 기대득점)
+    주의: 현재 2019 기준 하드코딩 → 향후 연도별 갱신 필요
+
+알고리즘:
+    Value Iteration을 5회 반복 (파울 카운트 사이클 수렴을 위해)
+    각 반복에서 모든 상태에 대해 최적 행동 탐색
+    MLP를 매번 호출하므로 상태 수가 많을수록 느림 (GPU 권장)
+"""
 import pandas as pd
 import numpy as np
 import wandb
@@ -10,7 +48,7 @@ class MDPOptimizer:
     벨만 방정식(Value Iteration)을 거꾸로 계산하여 최적의 볼배합을 찾아내는 클래스 (RE24 기반)
     """
     
-    def __init__(self, transition_model, feature_columns: List[str], target_classes: List[str], pitch_names: List[str], zones: List[float]):
+    def __init__(self, transition_model, feature_columns: List[str], target_classes: List[str], pitch_names: List[str], zones: List[float], pitcher_clusters: List[str] = None):
         """
         초기화 메서드
         :param transition_model: 학습된 TransitionProbabilityModel 객체 (predict_proba 메서드 제공)
@@ -18,12 +56,17 @@ class MDPOptimizer:
         :param target_classes: 모델 출력의 클래스(결과) 리스트
         :param pitch_names: 클러스터링으로 식별된 구종 이름 리스트
         :param zones: 투구 코스(존) 리스트
+        :param pitcher_clusters: 사용할 투수 군집 ID 문자열 리스트 (예: ["0","1","2"]).
+                                  None이면 ["0"] (단일 투수 모드 — 상태 수 동일 유지)
         """
         self.transition_model = transition_model
         self.feature_columns = feature_columns
         self.target_classes = target_classes
         self.pitch_names = pitch_names
         self.zones = zones
+        # 단일 투수 모드: pitcher_clusters=["0"] → 2,304개 상태 유지
+        # 범용 모드: pitcher_clusters=["0","1",...,"K-1"] → 2,304×K 상태
+        self.pitcher_clusters = pitcher_clusters if pitcher_clusters is not None else ["0"]
         
         # 2019 MLB 평균 기대 득점(RE24) 매트릭스 (투수 목표: 이를 낮추는 것)
         # 키 형식: '아웃_주자' (예: '0_000', '2_111')
@@ -63,7 +106,8 @@ class MDPOptimizer:
         return: List of (next_state_key, probability, runs_scored)
         """
         try:
-            count, outs_str, runners, cluster = current_state.split('_')
+            parts = current_state.split('_')
+            count, outs_str, runners, batter_cluster, pitcher_cluster = parts
             b, s = map(int, count.split('-'))
             outs = int(outs_str)
         except Exception:
@@ -136,8 +180,9 @@ class MDPOptimizer:
             if n_outs >= 3:
                 results.append(("END", prob, runs))
             else:
-                results.append((f"{n_cnt}_{n_outs}_{n_run}_{cluster}", prob, runs))
-                
+                # 투수 군집은 전이 과정에서 변하지 않으므로 그대로 유지
+                results.append((f"{n_cnt}_{n_outs}_{n_run}_{batter_cluster}_{pitcher_cluster}", prob, runs))
+
         return results
 
     def solve_mdp(self):
@@ -148,12 +193,18 @@ class MDPOptimizer:
         print("8장: RE24 기반 MDP 최적 투구 전략 역순 계산 중...")
         
         counts = ["3-2", "2-2", "3-1", "1-2", "2-1", "3-0", "0-2", "1-1", "2-0", "0-1", "1-0", "0-0"]
-        outs = ["2", "1", "0"]
+        outs_list = ["2", "1", "0"]
         runners = ["111", "011", "101", "110", "001", "010", "100", "000"]
-        clusters = [str(i) for i in range(8)]
-        
-        # 288 * 8 = 2304개 상태 공간 생성
-        states = [f"{c}_{o}_{r}_{cl}" for c, o, r, cl in itertools.product(counts, outs, runners, clusters)]
+        batter_clusters = [str(i) for i in range(8)]
+
+        # 상태 공간: 12 × 3 × 8 × 8 × K_pitchers
+        # 단일 투수 모드(K=1): 2,304개 / 범용 모드(K=6): 13,824개
+        n_total = len(counts) * len(outs_list) * len(runners) * len(batter_clusters) * len(self.pitcher_clusters)
+        print(f"총 상태 수: {n_total}개 (투수 군집 K={len(self.pitcher_clusters)})")
+        states = [
+            f"{c}_{o}_{r}_{bc}_{pc}"
+            for c, o, r, bc, pc in itertools.product(counts, outs_list, runners, batter_clusters, self.pitcher_clusters)
+        ]
         
         # 상태 가치 초기화
         self.state_values = {state: 0.0 for state in states}
@@ -167,23 +218,31 @@ class MDPOptimizer:
             for state in states:
                 best_action = None
                 best_expected_reward = float('-inf')
-                
-                _, cur_outs_str, cur_runners, cur_cluster = state.split('_')
+
+                # 5-파트 상태 키 파싱: count_outs_runners_batter_pitcher
+                s_parts = state.split('_')
+                cur_outs_str = s_parts[1]
+                cur_runners = s_parts[2]
+                cur_batter_cluster = s_parts[3]
+                cur_pitcher_cluster = s_parts[4]
+                count_state_val = f"{s_parts[0]}_{s_parts[1]}_{s_parts[2]}"  # "3-2_2_111"
                 current_re24 = self._get_re24(int(cur_outs_str), cur_runners)
-                
+
                 for pitch in self.pitch_names:
                     for zone in self.zones:
                         input_df = input_df_template.copy()
-                        
-                        state_col = f"count_state_{state.rsplit('_', 1)[0]}"
-                        pitch_col = f"mapped_pitch_name_{pitch}"
-                        zone_col = f"zone_{zone}"
-                        cluster_col = f"batter_cluster_{cur_cluster}"
-                        
-                        if state_col in input_df.columns: input_df[state_col] = 1
-                        if pitch_col in input_df.columns: input_df[pitch_col] = 1
-                        if zone_col in input_df.columns: input_df[zone_col] = 1
-                        if cluster_col in input_df.columns: input_df[cluster_col] = 1
+
+                        state_col         = f"count_state_{count_state_val}"
+                        pitch_col         = f"mapped_pitch_name_{pitch}"
+                        zone_col          = f"zone_{zone}"
+                        batter_cluster_col  = f"batter_cluster_{cur_batter_cluster}"
+                        pitcher_cluster_col = f"pitcher_cluster_{cur_pitcher_cluster}"
+
+                        if state_col          in input_df.columns: input_df[state_col]          = 1
+                        if pitch_col          in input_df.columns: input_df[pitch_col]          = 1
+                        if zone_col           in input_df.columns: input_df[zone_col]           = 1
+                        if batter_cluster_col  in input_df.columns: input_df[batter_cluster_col]  = 1
+                        if pitcher_cluster_col in input_df.columns: input_df[pitcher_cluster_col] = 1
                         
                         outcome_proba = self.transition_model.predict_proba(input_df)[0]
                         
@@ -201,7 +260,9 @@ class MDPOptimizer:
                                     next_re24 = 0.0
                                     future_value = 0.0
                                 else:
-                                    _, n_outs_str, n_runners, _ = next_state_key.split('_')
+                                    n_parts = next_state_key.split('_')
+                                    n_outs_str = n_parts[1]
+                                    n_runners = n_parts[2]
                                     next_re24 = self._get_re24(int(n_outs_str), n_runners)
                                     future_value = self.state_values.get(next_state_key, 0.0)
                                     
@@ -231,15 +292,18 @@ class MDPOptimizer:
         print("W&B 대시보드에 최적 투구 전략 로깅 중...")
         
         forward_counts = ["0-0", "0-1", "1-0", "0-2", "1-1", "2-0", "1-2", "2-1", "3-0", "2-2", "3-1", "3-2"]
+        # 상태 키 형식: count_outs_runners_batter_pitcher
+        # 투수 군집은 첫 번째 값(self.pitcher_clusters[0])으로 고정하여 샘플 출력
+        pc = self.pitcher_clusters[0]
         situations = [
-            ("0아웃 주자 없음 (군집 0)", "0_000_0"),
-            ("2아웃 만루 (군집 2)", "2_111_2"),
-            ("무사 2루 (군집 5)", "0_010_5")
+            ("0아웃 주자 없음 (타자군집 0)", f"0_000_0_{pc}"),
+            ("2아웃 만루 (타자군집 2)",      f"2_111_2_{pc}"),
+            ("무사 2루 (타자군집 5)",        f"0_010_5_{pc}"),
         ]
-        
+
         for sit_name, sit_code in situations:
             table = wandb.Table(columns=["Count", "Optimal Pitch", "Optimal Zone", "Run Prevented (Expected)"])
-            
+
             for count in forward_counts:
                 state_key = f"{count}_{sit_code}"
                 if state_key in self.optimal_policy:

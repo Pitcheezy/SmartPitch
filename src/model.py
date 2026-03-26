@@ -1,3 +1,35 @@
+"""
+model.py — 투구 결과 전이 확률 예측 MLP 모델
+
+역할:
+    (볼카운트 + 구종 + 코스 + 타자유형 + 투수유형) → 투구 결과 확률 분포 예측
+    MDP Solver와 RL 환경(PitchEnv)이 이 모델의 predict_proba()를 호출하여
+    각 행동(구종+코스)의 기대 결과를 추정합니다.
+
+입력 피처 (One-Hot Encoding):
+    - count_state    : "3-2_2_111" 형식 (볼-스트라이크_아웃_주자상태), 12×3×8 = 288가지
+    - mapped_pitch_name: 구종명 (Fastball/Slider 등, clustering.py 결과)
+    - zone           : 투구 코스 (1~14, 존 번호)
+    - batter_cluster : 타자 유형 (0~7, batter_clusters_2023.csv)
+    - pitcher_cluster: 투수 유형 (0~K-1, pitcher_clusters_2023.csv, 현재 K=4)
+
+출력:
+    - 투구 결과 클래스 확률 (called_strike, ball, swinging_strike, hit_into_play 등 ~12종)
+    - predict_proba(): softmax 확률 벡터 반환
+
+MLP 구조:
+    Input(가변) → Linear(128)-BN-ReLU-Dropout(0.2)
+              → Linear(64) -BN-ReLU-Dropout(0.2)
+              → Linear(output_dim)  ← 클래스 수만큼
+
+저장 파일:
+    best_transition_model.pth  ← val_loss 기준 최고 체크포인트
+
+개선 필요 사항:
+    - epochs=5는 너무 적음 → val_acc 47% 수준 (목표: 65%)
+    - 20~30 epoch + EarlyStopping 권장
+    - 범용 모델: 단일 투수 데이터 → 전 MLB 데이터로 재학습 필요
+"""
 import pandas as pd
 import numpy as np
 import os
@@ -11,7 +43,7 @@ from sklearn.preprocessing import LabelEncoder
 from typing import Tuple, Dict, Any, List
 
 class PitchDataset(Dataset):
-    """PyTorch 학습용 데이터셋"""
+    """PyTorch 학습용 데이터셋 래퍼 — numpy 배열을 Tensor로 변환"""
     def __init__(self, X: np.ndarray, y: np.ndarray):
         self.X = torch.FloatTensor(X)
         self.y = torch.LongTensor(y)
@@ -72,8 +104,11 @@ class TransitionProbabilityModel:
         Train/Val DataLoader를 생성
         """
         print("데이터 전처리 및 인코딩 중...")
-        # ==========================================
-        # 추가: 타자 군집 매핑표 로드 및 병합
+
+        # ── [타자 군집 merge] ────────────────────────────────────────────────────
+        # batter_clusters_2023.csv: {batter_id, stand, cluster}
+        # self.df의 'batter' 컬럼(MLBAM ID)으로 left join → 'batter_cluster' 컬럼 생성
+        # 매칭 안 되면 0 (unknown batter → 평균적 타자로 취급)
         csv_path = os.path.join(os.path.dirname(__file__), "..", "data", "batter_clusters_2023.csv")
         try:
             if os.path.exists(csv_path):
@@ -83,41 +118,67 @@ class TransitionProbabilityModel:
                 print(f"[Model] 타자 군집(batter_cluster) 병합 완료")
             else:
                 self.df['batter_cluster'] = "0"
-                print(f"[Model] Warning: '{csv_path}' 파일이 없습니다. 기본 군집(0) 할당.")
+                print(f"[Model] Warning: '{csv_path}' 없음. 기본 군집(0) 할당.")
         except Exception as e:
             self.df['batter_cluster'] = "0"
-            print(f"[Model] Error loading cluster csv: {e}")
-        # ==========================================
+            print(f"[Model] Error loading batter cluster csv: {e}")
 
-        # 1. count_state 만들기 (볼-스트라이크_아웃_주자123)
+        # ── [투수 군집 merge] ────────────────────────────────────────────────────
+        # pitcher_clusters_2023.csv: {pitcher_id, cluster}
+        # self.df의 'pitcher' 컬럼(MLBAM ID)으로 left join → 'pitcher_cluster' 컬럼 생성
+        # 컬럼 충돌 방지를 위해 pitcher 쪽 cluster를 p_cluster로 rename 후 merge
+        # 매칭 안 되면 0 (2023 시즌 500구 미만 투수 등)
+        pitcher_csv_path = os.path.join(os.path.dirname(__file__), "..", "data", "pitcher_clusters_2023.csv")
+        try:
+            if os.path.exists(pitcher_csv_path):
+                df_pitcher_clusters = pd.read_csv(pitcher_csv_path)[['pitcher_id', 'cluster']].rename(
+                    columns={'cluster': 'p_cluster'}  # batter merge의 'cluster' 컬럼과 충돌 방지
+                )
+                self.df = self.df.merge(df_pitcher_clusters, left_on='pitcher', right_on='pitcher_id', how='left')
+                self.df['pitcher_cluster'] = self.df['p_cluster'].fillna(0).astype(int).astype(str)
+                print(f"[Model] 투수 군집(pitcher_cluster) 병합 완료")
+            else:
+                self.df['pitcher_cluster'] = "0"
+                print(f"[Model] Warning: '{pitcher_csv_path}' 없음. 기본 군집(0) 할당.")
+        except Exception as e:
+            self.df['pitcher_cluster'] = "0"
+            print(f"[Model] Error loading pitcher cluster csv: {e}")
+
+        # ── [count_state 생성] ───────────────────────────────────────────────────
+        # 형식: "볼-스트라이크_아웃_123주자"  예) "3-2_2_111"
+        # MDP 상태 키의 앞 3파트와 동일한 형식 → MDP와 모델이 동일한 상태 표현 사용
         self.df['count_state'] = (
-            self.df['balls'].astype(int).astype(str) + "-" + 
-            self.df['strikes'].astype(int).astype(str) + "_" + 
-            self.df['outs_when_up'].astype(int).astype(str) + "_" + 
+            self.df['balls'].astype(int).astype(str) + "-" +
+            self.df['strikes'].astype(int).astype(str) + "_" +
+            self.df['outs_when_up'].astype(int).astype(str) + "_" +
             self.df['on_1b'] + self.df['on_2b'] + self.df['on_3b']
         )
-        
-        # 2. X, y 정의
-        X_raw = self.df[['count_state', 'mapped_pitch_name', 'zone', 'batter_cluster']]
+
+        # ── [One-Hot Encoding] ───────────────────────────────────────────────────
+        # 5개 카테고리 변수를 모두 원-핫으로 변환
+        # 최종 입력 차원: count_state(최대288) + pitch_name(4~6) + zone(14) + batter(8) + pitcher(4) ≈ 320차원
+        X_raw = self.df[['count_state', 'mapped_pitch_name', 'zone', 'batter_cluster', 'pitcher_cluster']]
         y_raw = self.df['description']
-        
-        # X: One-Hot Encoding
-        X_encoded = pd.get_dummies(X_raw, columns=['count_state', 'mapped_pitch_name', 'zone', 'batter_cluster'])
-        self.feature_columns = X_encoded.columns.tolist()
-        
-        # y: Label Encoding
+
+        X_encoded = pd.get_dummies(X_raw, columns=['count_state', 'mapped_pitch_name', 'zone', 'batter_cluster', 'pitcher_cluster'])
+        self.feature_columns = X_encoded.columns.tolist()  # MDP/RL에서 동일 컬럼 순서로 입력 생성 시 사용
+
+        # ── [Label Encoding] ─────────────────────────────────────────────────────
+        # 투구 결과(description)를 정수 레이블로 변환
+        # 예: "called_strike"→0, "ball"→1, "hit_into_play"→2, ...
         y_encoded = self.label_encoder.fit_transform(y_raw)
         self.target_classes = self.label_encoder.classes_.tolist()
-        
-        # --- 수정된 부분: 빈도가 너무 적은(예: 1) 클래스가 포함된 데이터 샘플 제거 ---
-        # stratify=y_encoded 를 위해 최소 2개 이상의 샘플을 가진 클래스만 남김
+
+        # ── [희귀 클래스 제거] ────────────────────────────────────────────────────
+        # train_test_split의 stratify 옵션은 각 클래스가 최소 2개 이상의 샘플을 요구함
+        # 1개뿐인 클래스(예: 매우 드문 결과 코드)는 stratify 오류를 일으키므로 제거
         class_counts = pd.Series(y_encoded).value_counts()
         valid_classes = class_counts[class_counts >= 2].index
-        
+
         valid_mask = pd.Series(y_encoded).isin(valid_classes).values
         X_encoded_valid = X_encoded.iloc[valid_mask]
         y_encoded_valid = y_encoded[valid_mask]
-        
+
         input_dim = len(self.feature_columns)
         output_dim = len(self.target_classes)
         print(f"입력 특징 차원: {input_dim}, 출력 클래스 수: {output_dim}")

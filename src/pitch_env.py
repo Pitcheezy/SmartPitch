@@ -1,3 +1,31 @@
+"""
+pitch_env.py — DQN 강화학습을 위한 Gymnasium 커스텀 환경
+
+역할:
+    MLP 전이 모델을 시뮬레이터로 사용해 투구 1구씩 진행하는 이닝 환경.
+    DQN 에이전트가 이 환경에서 탐색·학습하여 최적 투구 정책을 학습합니다.
+
+관측 공간 (8D):
+    [balls(0-3), strikes(0-2), outs(0-2), on_1b(0/1), on_2b(0/1), on_3b(0/1),
+     batter_cluster(0-7), pitcher_cluster(0-K-1)]
+
+행동 공간:
+    Discrete(n_pitches × n_zones)
+    예: 4구종 × 14코스 = 56
+    디코딩: pitch_idx = action // n_zones,  zone_idx = action % n_zones
+
+보상 함수:
+    RE24(이전 상황) - RE24(이후 상황) - 실점
+    ※ RE24는 아웃수+주자 상태만으로 결정 (count는 영향 없음)
+
+에피소드:
+    3아웃 = 이닝 종료 = terminated=True
+    초기 상태: 0-0카운트, 랜덤 아웃수, 랜덤 주자 (다양한 상황 학습을 위해)
+
+pitcher_cluster 파라미터:
+    int  → 단일 투수 모드: 항상 동일한 투수 유형 사용 (main.py 실행 시)
+    None → 범용 모드: 에피소드마다 랜덤 투수 유형 샘플링 (미래 범용 학습용)
+"""
 import gymnasium as gym
 import numpy as np
 import pandas as pd
@@ -33,11 +61,13 @@ class PitchEnv(gym.Env):
         "011": ("111", 0), "111": ("111", 1),
     }
 
-    def __init__(self, transition_model, pitch_names: List[str], zones: List[float]):
+    def __init__(self, transition_model, pitch_names: List[str], zones: List[float],
+                 pitcher_cluster: Optional[int] = None):
         """
-        :param transition_model : 학습된 TransitionProbabilityModel 인스턴스
-        :param pitch_names      : 클러스터링으로 식별된 구종 이름 리스트
-        :param zones            : 투구 존 번호 리스트
+        :param transition_model  : 학습된 TransitionProbabilityModel 인스턴스
+        :param pitch_names       : 클러스터링으로 식별된 구종 이름 리스트
+        :param zones             : 투구 존 번호 리스트
+        :param pitcher_cluster   : 고정 투수 군집 ID (int) — None이면 에피소드마다 무작위 선택
         """
         super().__init__()
         import os
@@ -50,26 +80,43 @@ class PitchEnv(gym.Env):
         
         # ── 타자 군집(Cluster) 매핑 데이터 로드 ─────────────────────────────
         self.batter_clusters = {}
-        csv_path = os.path.join(os.path.dirname(__file__), "..", "data", "batter_clusters_2023.csv")
+        batter_csv = os.path.join(os.path.dirname(__file__), "..", "data", "batter_clusters_2023.csv")
         try:
-            if os.path.exists(csv_path):
-                df_clusters = pd.read_csv(csv_path)
-                # {batter_id: cluster_id} 형태로 캐싱
-                self.batter_clusters = dict(zip(df_clusters['batter_id'], df_clusters['cluster']))
+            if os.path.exists(batter_csv):
+                df_b = pd.read_csv(batter_csv)
+                self.batter_clusters = dict(zip(df_b['batter_id'], df_b['cluster']))
                 print(f"[PitchEnv] 타자 군집 데이터 매핑 완료: {len(self.batter_clusters)}명")
             else:
-                print(f"[PitchEnv] Warning: '{csv_path}' 파일이 없습니다. 모든 타자를 기본 군집(0)으로 간주합니다.")
+                print(f"[PitchEnv] Warning: '{batter_csv}' 없음. 모든 타자를 기본 군집(0)으로 간주합니다.")
         except Exception as e:
-            print(f"[PitchEnv] Error reading cluster csv: {e}. Defaulting to cluster 0.")
+            print(f"[PitchEnv] Error reading batter cluster csv: {e}. Defaulting to cluster 0.")
+
+        # ── 투수 군집(Cluster) 매핑 데이터 로드 ─────────────────────────────
+        # fixed_pitcher_cluster가 지정되면 항상 그 값 사용 (단일 투수 모드)
+        # None이면 에피소드마다 랜덤 선택 (범용 모드)
+        self.fixed_pitcher_cluster = pitcher_cluster
+        self.n_pitcher_clusters = 1  # 기본값; CSV가 있으면 실제 K 값으로 업데이트
+        pitcher_csv = os.path.join(os.path.dirname(__file__), "..", "data", "pitcher_clusters_2023.csv")
+        try:
+            if os.path.exists(pitcher_csv):
+                df_p = pd.read_csv(pitcher_csv)
+                self.n_pitcher_clusters = int(df_p['cluster'].max()) + 1
+                print(f"[PitchEnv] 투수 군집 데이터 로드 완료: K={self.n_pitcher_clusters}")
+            else:
+                print(f"[PitchEnv] Warning: '{pitcher_csv}' 없음. 투수 군집 K=1로 기본 처리.")
+        except Exception as e:
+            print(f"[PitchEnv] Error reading pitcher cluster csv: {e}. K=1 fallback.")
 
         # ── 행동 공간: 구종 × 존 (이산) ─────────────────────────────────────
         self.action_space = gym.spaces.Discrete(self.n_pitches * self.n_zones)
 
-        # ── 관측 공간: [balls, strikes, outs, 1b, 2b, 3b, batter_cluster] ─────────
-        # batter_cluster: 0 ~ 7 (총 8개 군집)
+        # ── 관측 공간: [balls, strikes, outs, 1b, 2b, 3b, batter_cluster, pitcher_cluster] ──
+        # batter_cluster : 0 ~ 7  (K=8 고정)
+        # pitcher_cluster: 0 ~ (n_pitcher_clusters - 1)  (K=4~8, 실루엣 탐색 결과)
+        max_pc = max(self.n_pitcher_clusters - 1, 0)
         self.observation_space = gym.spaces.Box(
-            low=np.array([0,  0,  0,  0,  0,  0,  0], dtype=np.float32),
-            high=np.array([3,  2,  2,  1,  1,  1,  7], dtype=np.float32),
+            low=np.array( [0, 0, 0, 0, 0, 0, 0, 0],       dtype=np.float32),
+            high=np.array([3, 2, 2, 1, 1, 1, 7, max_pc],   dtype=np.float32),
             dtype=np.float32,
         )
 
@@ -80,6 +127,7 @@ class PitchEnv(gym.Env):
         self.runners = [0, 0, 0]  # [1루, 2루, 3루]
         self.current_batter_id = None
         self.current_batter_cluster = 0
+        self.current_pitcher_cluster = self.fixed_pitcher_cluster if self.fixed_pitcher_cluster is not None else 0
 
     # ─────────────────────────────────────────────────────────────────────────
     # Gym 인터페이스
@@ -106,7 +154,13 @@ class PitchEnv(gym.Env):
         else:
             self.current_batter_id = -1
             self.current_batter_cluster = int(self.np_random.integers(0, 8))
-            
+
+        # 투수 군집: 고정값(단일 투수 모드)이면 그 값 유지, None이면 에피소드마다 무작위 선택
+        if self.fixed_pitcher_cluster is not None:
+            self.current_pitcher_cluster = self.fixed_pitcher_cluster
+        else:
+            self.current_pitcher_cluster = int(self.np_random.integers(0, self.n_pitcher_clusters))
+
         return self._get_obs(), {}
 
     def step(self, action: int):
@@ -160,7 +214,8 @@ class PitchEnv(gym.Env):
             [
                 self.balls, self.strikes, self.outs,
                 self.runners[0], self.runners[1], self.runners[2],
-                self.current_batter_cluster
+                self.current_batter_cluster,
+                self.current_pitcher_cluster,
             ],
             dtype=np.float32,
         )
@@ -195,6 +250,7 @@ class PitchEnv(gym.Env):
             ("mapped_pitch_name", pitch),
             ("zone", zone),
             ("batter_cluster", str(int(self.current_batter_cluster))),
+            ("pitcher_cluster", str(int(self.current_pitcher_cluster))),
         ]:
             col_name = f"{col_key}_{col_val}"
             if col_name in input_df.columns:

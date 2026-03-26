@@ -1,7 +1,40 @@
+"""
+data_loader.py — MLB Statcast 투구 데이터 수집 및 전처리
+
+역할:
+    pybaseball 라이브러리를 통해 특정 투수의 투구 데이터를 MLB Statcast API에서
+    수집하고, 이후 파이프라인(clustering → model → mdp → rl)에서 사용할 수 있도록
+    전처리한 뒤 W&B Artifact로 영구 저장합니다.
+
+주요 동작:
+    1. playerid_lookup()으로 투수의 MLBAM ID 조회
+    2. statcast_pitcher()로 지정 기간 투구 데이터 수집 (캐시 활용)
+    3. 주자 상태(on_1b/on_2b/on_3b) NaN → 0/1 문자열 변환
+    4. 필요 컬럼만 추출: 투구 피처(6개) + 메타(10개)
+    5. W&B Artifact로 CSV 업로드 (재현 가능한 실험 관리)
+
+출력 컬럼:
+    피처: release_speed, release_spin_rate, pfx_x, pfx_z, release_pos_x, release_pos_z
+    메타: balls, strikes, outs_when_up, on_1b, on_2b, on_3b, description, zone,
+          batter(MLBAM ID), pitcher(MLBAM ID)
+
+주의:
+    - pybaseball.cache.enable()이 전역 적용되어 있어 동일 날짜 재요청 시 캐시를 사용합니다.
+    - self.pitcher_mlbam_id는 main.py에서 pitcher_clustering.py 결과와 대조할 때 사용됩니다.
+    - 'batter' 컬럼은 model.py의 batter_clusters_2023.csv merge에 필요합니다.
+    - 'pitcher' 컬럼은 model.py의 pitcher_clusters_2023.csv merge에 필요합니다.
+
+실행 방법:
+    이 모듈은 직접 실행하지 않고 main.py에서 임포트하여 사용합니다.
+    data_loader = PitchDataLoader("Clayton", "Kershaw", "2024-03-20", "2024-09-30")
+    df = data_loader.load_and_prepare_data(upload_artifact=True)
+"""
 import pandas as pd
-from pybaseball import statcast_pitcher, playerid_lookup
+from pybaseball import statcast_pitcher, playerid_lookup, cache
 import wandb
 import os
+
+cache.enable()  # 동일 날짜 범위 재요청 시 로컬 캐시 사용 (대용량 반복 다운로드 방지)
 
 class PitchDataLoader:
     """
@@ -36,6 +69,7 @@ class PitchDataLoader:
             raise ValueError(f"선수 정보를 찾을 수 없습니다: {self.first_name} {self.last_name}")
             
         mlbam_id = player_info['key_mlbam'].values[0]
+        self.pitcher_mlbam_id = int(mlbam_id)  # pitcher_cluster 조회를 위해 외부에서 접근 가능하도록 저장
         
         print(f"[{self.start_date} ~ {self.end_date}] 투구 데이터 수집 중...")
         df = statcast_pitcher(self.start_date, self.end_date, player_id=mlbam_id)
@@ -60,7 +94,7 @@ class PitchDataLoader:
         
         # 필요한 피처와 메타데이터 정의
         features = ['release_speed', 'release_spin_rate', 'pfx_x', 'pfx_z', 'release_pos_x', 'release_pos_z']
-        meta = ['balls', 'strikes', 'outs_when_up', 'on_1b', 'on_2b', 'on_3b', 'description', 'zone', 'batter']
+        meta = ['balls', 'strikes', 'outs_when_up', 'on_1b', 'on_2b', 'on_3b', 'description', 'zone', 'batter', 'pitcher']
         
         # 필요한 컬럼만 추출 후 결측치 제거
         df_processed = df[features + meta].dropna()
