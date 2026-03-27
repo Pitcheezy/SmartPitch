@@ -229,24 +229,33 @@ class MDPOptimizer:
                 cur_runners = s_parts[2]
                 cur_batter_cluster = s_parts[3]
                 cur_pitcher_cluster = s_parts[4]
-                count_state_val = f"{s_parts[0]}_{s_parts[1]}_{s_parts[2]}"  # "3-2_2_111"
-                current_re24 = self._get_re24(int(cur_outs_str), cur_runners)
+                cur_b, cur_s = map(int, s_parts[0].split('-'))
+                cur_outs = int(cur_outs_str)
+                current_re24 = self._get_re24(cur_outs, cur_runners)
 
                 for pitch in self.pitch_names:
                     for zone in self.zones:
                         input_df = input_df_template.copy()
 
-                        state_col         = f"count_state_{count_state_val}"
-                        pitch_col         = f"mapped_pitch_name_{pitch}"
-                        zone_col          = f"zone_{zone}"
-                        batter_cluster_col  = f"batter_cluster_{cur_batter_cluster}"
-                        pitcher_cluster_col = f"pitcher_cluster_{cur_pitcher_cluster}"
+                        # 수치 피처: 볼카운트/아웃/주자 직접 할당 (B안: count_state one-hot 대체)
+                        for col, val in [
+                            ('balls',   cur_b),
+                            ('strikes', cur_s),
+                            ('outs',    cur_outs),
+                            ('on_1b',   int(cur_runners[0])),
+                            ('on_2b',   int(cur_runners[1])),
+                            ('on_3b',   int(cur_runners[2])),
+                        ]:
+                            if col in input_df.columns: input_df[col] = val
 
-                        if state_col          in input_df.columns: input_df[state_col]          = 1
-                        if pitch_col          in input_df.columns: input_df[pitch_col]          = 1
-                        if zone_col           in input_df.columns: input_df[zone_col]           = 1
-                        if batter_cluster_col  in input_df.columns: input_df[batter_cluster_col]  = 1
-                        if pitcher_cluster_col in input_df.columns: input_df[pitcher_cluster_col] = 1
+                        # 카테고리 피처: 구종/존/타자·투수군집 one-hot
+                        for col_name, col_val in [
+                            (f"mapped_pitch_name_{pitch}",             1),
+                            (f"zone_{zone}",                           1),
+                            (f"batter_cluster_{cur_batter_cluster}",   1),
+                            (f"pitcher_cluster_{cur_pitcher_cluster}", 1),
+                        ]:
+                            if col_name in input_df.columns: input_df[col_name] = col_val
                         
                         outcome_proba = self.transition_model.predict_proba(input_df)[0]
                         
