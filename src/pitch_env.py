@@ -271,21 +271,24 @@ class PitchEnv(gym.Env):
         """
         runs = 0.0
 
-        # ── 스트라이크 계열 ──────────────────────────────────────────────────
-        if outcome in {"called_strike", "swinging_strike", "foul_tip",
-                       "swinging_strike_blocked", "missed_bunt"}:
+        # ── 스트라이크 (strike 그룹) ─────────────────────────────────────────
+        # called_strike / swinging_strike / foul_tip / swinging_strike_blocked
+        # / missed_bunt / bunt_foul_tip 이 모두 "strike"로 병합됨
+        if outcome == "strike":
             self.strikes += 1
             if self.strikes >= 3:          # 삼진
                 self.outs += 1
                 self.balls, self.strikes = 0, 0
 
-        # ── 파울 ─────────────────────────────────────────────────────────────
-        elif outcome in {"foul", "foul_bunt"}:
+        # ── 파울 (foul 그룹) ─────────────────────────────────────────────────
+        # foul / foul_bunt 가 "foul"로 병합됨
+        elif outcome == "foul":
             if self.strikes < 2:           # 2스트라이크 이후 파울은 카운트 불변
                 self.strikes += 1
 
-        # ── 볼 계열 ──────────────────────────────────────────────────────────
-        elif outcome in {"ball", "blocked_dirt", "pitchout"}:
+        # ── 볼 (ball 그룹) ───────────────────────────────────────────────────
+        # ball / blocked_ball 이 "ball"로 병합됨
+        elif outcome == "ball":
             self.balls += 1
             if self.balls >= 4:            # 볼넷
                 runs = self._apply_walk()
