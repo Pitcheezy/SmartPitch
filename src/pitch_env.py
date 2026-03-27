@@ -235,18 +235,26 @@ class PitchEnv(gym.Env):
         TransitionProbabilityModel에 현재 상태 + 행동을 입력해 투구 결과를 확률적으로 샘플링.
         모델 학습 시 사용한 One-Hot Encoding 형식과 동일하게 구성합니다.
         """
-        runners_str = self._runners_str()
-        count_state = f"{self.balls}-{self.strikes}_{self.outs}_{runners_str}"
-
         # 모델 입력 DataFrame (Zero-initialized)
         input_df = pd.DataFrame(
             np.zeros((1, len(self.transition_model.feature_columns))),
             columns=self.transition_model.feature_columns,
         )
 
-        # 해당 상태/구종/존 컬럼을 1로 설정
+        # 수치 피처: 볼카운트/아웃/주자 직접 할당 (B안: count_state one-hot 대체)
+        for col, val in [
+            ('balls',   self.balls),
+            ('strikes', self.strikes),
+            ('outs',    self.outs),
+            ('on_1b',   self.runners[0]),
+            ('on_2b',   self.runners[1]),
+            ('on_3b',   self.runners[2]),
+        ]:
+            if col in input_df.columns:
+                input_df[col] = float(val)
+
+        # 카테고리 피처: 구종/존/타자군집/투수군집 one-hot
         for col_key, col_val in [
-            ("count_state", count_state),
             ("mapped_pitch_name", pitch),
             ("zone", zone),
             ("batter_cluster", str(int(self.current_batter_cluster))),
