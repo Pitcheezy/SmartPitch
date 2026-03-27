@@ -154,7 +154,8 @@ paper_review/
 예시: "3-2_2_111_7_0"
 파싱: parts = state.split('_')  → 5개 원소
       parts[0]="3-2", parts[1]="2", parts[2]="111", parts[3]="7", parts[4]="0"
-      count_state_val = f"{parts[0]}_{parts[1]}_{parts[2]}"  ← model.py 입력 형식
+      # count_state_val은 model.py 입력에 직접 사용하지 않음 (B안 이후)
+      # balls/strikes/outs/runners를 수치 피처로 직접 전달
 ```
 
 > **주의**: 예전에 4-파트 형식(`count_outs_runners_batter`)이었다가 5-파트로 변경됨.
@@ -166,10 +167,13 @@ paper_review/
  batter_cluster(0-7), pitcher_cluster(0-3)]
 ```
 
-### One-Hot 인코딩 컬럼 순서 (model.py)
+### 모델 입력 피처 구성 (model.py, B안 이후)
 ```python
-pd.get_dummies(X_raw, columns=['count_state', 'mapped_pitch_name', 'zone',
-                                'batter_cluster', 'pitcher_cluster'])
+# 수치 피처 (6개) + One-Hot 범주형 피처
+X_num = pd.DataFrame({'balls':..., 'strikes':..., 'outs':..., 'on_1b':..., 'on_2b':..., 'on_3b':...})
+X_cat_encoded = pd.get_dummies(df[['mapped_pitch_name','zone','batter_cluster','pitcher_cluster']])
+X_encoded = pd.concat([X_num, X_cat_encoded], axis=1)
+# 총 ~40차원: 수치(6) + pitch_name(9) + zone(13) + batter(8) + pitcher(4)
 # feature_columns 리스트로 보관 → PitchEnv와 MDPOptimizer에서 동일 순서로 입력 구성
 ```
 

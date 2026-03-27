@@ -6,15 +6,18 @@ model.py — 투구 결과 전이 확률 예측 MLP 모델
     MDP Solver와 RL 환경(PitchEnv)이 이 모델의 predict_proba()를 호출하여
     각 행동(구종+코스)의 기대 결과를 추정합니다.
 
-입력 피처 (One-Hot Encoding):
-    - count_state    : "3-2_2_111" 형식 (볼-스트라이크_아웃_주자상태), 12×3×8 = 288가지
+입력 피처 (총 ~40차원):
+    수치 피처 6개 (정수, count_state one-hot 288차원 대체):
+    - balls, strikes, outs     : 볼카운트/아웃 수 (0~3, 0~2, 0~2)
+    - on_1b, on_2b, on_3b      : 주자 상태 (0/1)
+    범주형 피처 One-Hot:
     - mapped_pitch_name: 구종명 (Fastball/Slider 등, clustering.py 결과)
     - zone           : 투구 코스 (1~14, 존 번호)
     - batter_cluster : 타자 유형 (0~7, batter_clusters_2023.csv)
     - pitcher_cluster: 투수 유형 (0~K-1, pitcher_clusters_2023.csv, 현재 K=4)
 
 출력:
-    - 투구 결과 클래스 확률 (called_strike, ball, swinging_strike, hit_into_play 등 ~12종)
+    - 투구 결과 클래스 확률 (strike/foul/ball/hit_by_pitch/hit_into_play 5종)
     - predict_proba(): softmax 확률 벡터 반환
 
 MLP 구조:
@@ -192,24 +195,29 @@ class TransitionProbabilityModel:
             self.df['pitcher_cluster'] = "0"
             print(f"[Model] Error loading pitcher cluster csv: {e}")
 
-        # ── [count_state 생성] ───────────────────────────────────────────────────
-        # 형식: "볼-스트라이크_아웃_123주자"  예) "3-2_2_111"
-        # MDP 상태 키의 앞 3파트와 동일한 형식 → MDP와 모델이 동일한 상태 표현 사용
-        self.df['count_state'] = (
-            self.df['balls'].astype(int).astype(str) + "-" +
-            self.df['strikes'].astype(int).astype(str) + "_" +
-            self.df['outs_when_up'].astype(int).astype(str) + "_" +
-            self.df['on_1b'] + self.df['on_2b'] + self.df['on_3b']
-        )
+        # ── [수치 피처: 볼카운트/아웃/주자] ─────────────────────────────────────
+        # count_state one-hot(288차원) 대신 6개 정수로 직접 표현 (B안 입력 재설계)
+        # 카운트 간 일반화 가능: "2-2_2_000"과 "1-2_2_000"의 공통 패턴을 학습
+        # on_1b/2b/3b는 "0"/"1" 문자열(data_loader 출력) 또는 0/1 정수 모두 허용
+        X_num = pd.DataFrame({
+            'balls':   self.df['balls'].astype(int),
+            'strikes': self.df['strikes'].astype(int),
+            'outs':    self.df['outs_when_up'].astype(int),
+            'on_1b':   self.df['on_1b'].astype(int),
+            'on_2b':   self.df['on_2b'].astype(int),
+            'on_3b':   self.df['on_3b'].astype(int),
+        })
 
-        # ── [One-Hot Encoding] ───────────────────────────────────────────────────
-        # 5개 카테고리 변수를 모두 원-핫으로 변환
-        # 최종 입력 차원: count_state(최대288) + pitch_name(4~6) + zone(14) + batter(8) + pitcher(4) ≈ 320차원
-        X_raw = self.df[['count_state', 'mapped_pitch_name', 'zone', 'batter_cluster', 'pitcher_cluster']]
+        # ── [One-Hot Encoding: 구종/존/타자군집/투수군집] ────────────────────────
+        # 최종 입력 차원: 수치(6) + pitch_name(9) + zone(13) + batter(8) + pitcher(4) ≈ 40차원
+        X_cat = self.df[['mapped_pitch_name', 'zone', 'batter_cluster', 'pitcher_cluster']]
+        X_cat_encoded = pd.get_dummies(X_cat, columns=['mapped_pitch_name', 'zone', 'batter_cluster', 'pitcher_cluster'])
+
         y_raw = self.df['description']
 
-        X_encoded = pd.get_dummies(X_raw, columns=['count_state', 'mapped_pitch_name', 'zone', 'batter_cluster', 'pitcher_cluster'])
-        self.feature_columns = X_encoded.columns.tolist()  # MDP/RL에서 동일 컬럼 순서로 입력 생성 시 사용
+        # ── [수치 + 카테고리 결합] ──────────────────────────────────────────────
+        X_encoded = pd.concat([X_num.reset_index(drop=True), X_cat_encoded.reset_index(drop=True)], axis=1)
+        self.feature_columns = X_encoded.columns.tolist()  # MDP/RL에서 동일 컬럼 순서로 입력 구성 시 사용
 
         # ── [Label Encoding] ─────────────────────────────────────────────────────
         # 투구 결과(description)를 정수 레이블로 변환
