@@ -114,25 +114,29 @@ class MDPOptimizer:
             return [(current_state, 1.0, 0.0)]
 
         outcomes = [] # (next_count, next_outs, next_runners, prob, runs)
-        
-        # 1. 스트라이크 계열 (스트라이크 판정, 헛스윙 등)
-        if outcome in ['called_strike', 'swinging_strike', 'foul_tip', 'swinging_strike_blocked', 'missed_bunt']:
+
+        # 1. 스트라이크 그룹 (strike)
+        # called_strike / swinging_strike / foul_tip / swinging_strike_blocked
+        # / missed_bunt / bunt_foul_tip 이 모두 "strike"로 병합됨
+        if outcome == 'strike':
             s += 1
             if s >= 3:
                 # 삼진 아웃: 카운트 리셋, 아웃 증가
                 outcomes.append(("0-0", outs + 1, runners, 1.0, 0))
             else:
                 outcomes.append((f"{b}-{s}", outs, runners, 1.0, 0))
-                
-        # 2. 파울
-        elif outcome in ['foul', 'foul_bunt']:
+
+        # 2. 파울 그룹 (foul)
+        # foul / foul_bunt 가 "foul"로 병합됨
+        elif outcome == 'foul':
             if s < 2:
                 s += 1
             # 2스트라이크 이후 파울은 카운트 유지
             outcomes.append((f"{b}-{s}", outs, runners, 1.0, 0))
-            
-        # 3. 볼 계열
-        elif outcome in ['ball', 'blocked_dirt', 'pitchout']:
+
+        # 3. 볼 그룹 (ball)
+        # ball / blocked_ball 이 "ball"로 병합됨
+        elif outcome == 'ball':
             b += 1
             if b >= 4:
                 # 볼넷: 카운트 리셋, 주자 진루
@@ -140,14 +144,14 @@ class MDPOptimizer:
                 outcomes.append(("0-0", outs, next_runners, 1.0, runs))
             else:
                 outcomes.append((f"{b}-{s}", outs, runners, 1.0, 0))
-                
-        # 4. 몸에 맞는 볼 (HBP)
+
+        # 4. 몸에 맞는 볼 (hit_by_pitch)
         elif outcome == 'hit_by_pitch':
             # 사구: 카운트 리셋, 주자 진루
             next_runners, runs = self._advance_runners_walk(runners)
             outcomes.append(("0-0", outs, next_runners, 1.0, runs))
-            
-        # 5. 인플레이 타구 (단순화된 확률적 분기)
+
+        # 5. 인플레이 타구 (hit_into_play, 단순화된 확률적 분기)
         elif outcome == 'hit_into_play':
             # 인플레이 시 해당 타석 종료이므로 다음 타자 카운트는 무조건 0-0
             
