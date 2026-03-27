@@ -68,6 +68,31 @@ PITCH_TYPE_MAP = {
     'PO': None,  # pitchout — 전술구, 학습 데이터에서 제외
 }
 
+# ── description(투구 결과) 12클래스 → 5그룹 병합 매핑 ──────────────────────
+# pitch_env.py _apply_outcome()의 처리 그룹과 1:1 대응
+# MDP/DQN이 실제로 구분하는 단위와 모델 출력을 정합시킴
+DESCRIPTION_MAP = {
+    # strike 그룹: 스트라이크 판정 (삼진 가능)
+    "called_strike":           "strike",
+    "swinging_strike":         "strike",
+    "foul_tip":                "strike",
+    "swinging_strike_blocked": "strike",
+    "missed_bunt":             "strike",
+    "bunt_foul_tip":           "strike",  # 기존 버그: pitch_env/mdp_solver에서 else 처리됐음
+
+    # foul 그룹: 파울 (2스트라이크 이전만 스트라이크 추가)
+    "foul":                    "foul",
+    "foul_bunt":               "foul",
+
+    # ball 그룹: 볼 (볼넷 가능)
+    "ball":                    "ball",
+    "blocked_ball":            "ball",    # 기존 버그: pitch_env/mdp_solver에서 else 처리됐음
+
+    # 나머지: 변경 없음
+    "hit_by_pitch":            "hit_by_pitch",
+    "hit_into_play":           "hit_into_play",
+}
+
 # ── 파일 경로 ───────────────────────────────────────────────────────────────
 _BASE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.join(_BASE, '..')
@@ -93,8 +118,10 @@ def _preprocess_raw(df: pd.DataFrame) -> pd.DataFrame:
       1. pitch_type 코드 → mapped_pitch_name 문자열 (PITCH_TYPE_MAP 사용)
       2. on_1b/2b/3b float/NaN → "0"/"1" 문자열
          (model.py _prepare_data()의 count_state 문자열 연결 요구사항)
-      3. 불필요한 레코드 제거 (pitchout, description/zone NaN 등)
-      4. 필요 컬럼만 추출
+      3. description 12클래스 → 5그룹 병합 (DESCRIPTION_MAP 사용)
+         pitch_env.py / mdp_solver.py와 정합 맞춤
+      4. 불필요한 레코드 제거 (pitchout, description/zone NaN 등)
+      5. 필요 컬럼만 추출
 
     :param df: statcast() 반환 DataFrame
     :return:   전처리 완료 DataFrame
@@ -112,7 +139,14 @@ def _preprocess_raw(df: pd.DataFrame) -> pd.DataFrame:
     for col in ['on_1b', 'on_2b', 'on_3b']:
         df[col] = df[col].notna().astype(int).astype(str)
 
-    # 3. 필수 컬럼 유지 및 NaN 제거
+    # 3. description 12클래스 → 5그룹 병합
+    df['description'] = df['description'].map(DESCRIPTION_MAP)
+    before = len(df)
+    df = df[df['description'].notna()]  # 매핑 안 된 희귀 결과 코드 제거
+    if before - len(df) > 0:
+        print(f"  description 매핑 후: {len(df):,}건 (매핑 없음 제거: {before - len(df):,}건)")
+
+    # 4. 필수 컬럼 유지 및 NaN 제거
     required = [
         'balls', 'strikes', 'outs_when_up',
         'on_1b', 'on_2b', 'on_3b',
@@ -120,7 +154,6 @@ def _preprocess_raw(df: pd.DataFrame) -> pd.DataFrame:
         'batter', 'pitcher',
     ]
     df = df[required].dropna(subset=['balls', 'strikes', 'outs_when_up', 'zone', 'description'])
-    df = df[df['description'].str.strip() != '']
     print(f"  필수 컬럼 필터링 후: {len(df):,}건")
 
     # zone float → int 변환 (1~14 정수)
