@@ -267,8 +267,12 @@ def _run_single_experiment(exp: dict, df_base: pd.DataFrame) -> dict:
             use_lr_scheduler=exp["use_lr_scheduler"],
         )
 
-        best_val_loss = wandb.run.summary.get("val_loss",      float('nan'))
-        final_val_acc = wandb.run.summary.get("val_accuracy",  float('nan'))
+        # train_model()이 wandb.run.summary에 best_val_loss/acc를 세팅함
+        # 구버전 run과의 호환을 위해 fallback 키도 허용
+        best_val_loss = wandb.run.summary.get("best_val_loss",
+                        wandb.run.summary.get("val_loss",      float('nan')))
+        final_val_acc = wandb.run.summary.get("best_val_acc",
+                        wandb.run.summary.get("val_accuracy",  float('nan')))
 
         # 실험별 모델 가중치 및 메타데이터를 각자 경로에 보관
         # → main()에서 best 실험의 파일을 universal 경로로 복사
