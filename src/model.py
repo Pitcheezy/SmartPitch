@@ -226,9 +226,19 @@ class TransitionProbabilityModel:
         X_encoded = pd.concat([X_num.reset_index(drop=True), X_cat_encoded.reset_index(drop=True)], axis=1).astype(float)
         self.feature_columns = X_encoded.columns.tolist()  # MDP/RL에서 동일 컬럼 순서로 입력 구성 시 사용
 
+        # ── [hit_by_pitch 제거] ───────────────────────────────────────────────────
+        # 전체의 0.3%이며 투수의 의도적 선택이 아닌 비의도적 결과.
+        # 극소수 클래스로 인한 학습 불균형(F1=0.000)을 방지하기 위해 제거.
+        _hbp_mask = self.df['description'] != 'hit_by_pitch'
+        _removed  = (~_hbp_mask).sum()
+        if _removed > 0:
+            self.df = self.df[_hbp_mask].reset_index(drop=True)
+            y_raw   = self.df['description']
+            print(f"  hit_by_pitch 제거: {_removed:,}건 → 남은 데이터: {len(self.df):,}건")
+
         # ── [Label Encoding] ─────────────────────────────────────────────────────
         # 투구 결과(description)를 정수 레이블로 변환
-        # 예: "called_strike"→0, "ball"→1, "hit_into_play"→2, ...
+        # 예: "ball"→0, "foul"→1, "hit_into_play"→2, "strike"→3 (4클래스)
         y_encoded = self.label_encoder.fit_transform(y_raw)
         self.target_classes = self.label_encoder.classes_.tolist()
 
