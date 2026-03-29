@@ -109,6 +109,33 @@ EPOCHS     = 20
 BATCH_SIZE = 1024
 LR         = 0.001
 
+# ── 실험 설정 ────────────────────────────────────────────────────────────────
+# 각 실험은 독립된 W&B run으로 기록됩니다.
+# Baseline: hidden_dims=[128,64], no scheduler, no feature engineering (이전 run 참고)
+EXPERIMENTS = [
+    {
+        "run_name":               "Universal_MLP_Exp1_BiggerModel",
+        "description":            "모델 크기 확장: [256, 128, 64]",
+        "hidden_dims":            [256, 128, 64],
+        "use_lr_scheduler":       False,
+        "use_feature_engineering": False,
+    },
+    {
+        "run_name":               "Universal_MLP_Exp2_LRScheduler",
+        "description":            "ReduceLROnPlateau 스케줄러 추가 (factor=0.5, patience=3)",
+        "hidden_dims":            [128, 64],
+        "use_lr_scheduler":       True,
+        "use_feature_engineering": False,
+    },
+    {
+        "run_name":               "Universal_MLP_Exp3_FeatureEng",
+        "description":            "파생 피처 추가: is_two_strike, is_first_pitch, balls_minus_strikes, zone_row, zone_col",
+        "hidden_dims":            [128, 64],
+        "use_lr_scheduler":       False,
+        "use_feature_engineering": True,
+    },
+]
+
 
 def _preprocess_raw(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -162,82 +189,203 @@ def _preprocess_raw(df: pd.DataFrame) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
+def _add_engineered_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    [Exp3용] 기존 피처에서 파생된 수치 피처 5개를 추가합니다.
+
+    추가 피처:
+      is_two_strike      : 2스트라이크 여부 (투수가 finishing pitch를 선택하는 상황)
+      is_first_pitch     : 첫 투구 여부 (0-0 카운트, 투수가 선제 스트라이크를 노리는 상황)
+      balls_minus_strikes: 볼-스트라이크 차이 (양수=타자 카운트, 음수=투수 카운트)
+      zone_row           : 존의 세로 위치 (1=상단, 2=중단, 3=하단, 0=스트라이크존 외)
+      zone_col           : 존의 가로 위치 (1=안쪽, 2=중앙, 3=바깥쪽, 0=스트라이크존 외)
+
+    zone_row/col는 존의 공간적 구조를 one-hot 손실 없이 수치로 표현합니다.
+    Statcast 존 번호 기준:
+        행1: 1,2,3 (상단) / 행2: 4,5,6 (중단) / 행3: 7,8,9 (하단)
+        열1: 1,4,7 (안쪽) / 열2: 2,5,8 (중앙) / 열3: 3,6,9 (바깥쪽)
+        11~14: 섀도우 존(스트라이크존 외) → row=0, col=0
+    """
+    df = df.copy()
+    balls   = df['balls'].astype(int)
+    strikes = df['strikes'].astype(int)
+    zone    = df['zone'].astype(int)
+
+    df['is_two_strike']       = (strikes == 2).astype(int)
+    df['is_first_pitch']      = ((balls == 0) & (strikes == 0)).astype(int)
+    df['balls_minus_strikes'] = balls - strikes
+
+    _zone_row = {1:1, 2:1, 3:1, 4:2, 5:2, 6:2, 7:3, 8:3, 9:3, 11:0, 12:0, 13:0, 14:0}
+    _zone_col = {1:1, 2:2, 3:3, 4:1, 5:2, 6:3, 7:1, 8:2, 9:3, 11:0, 12:0, 13:0, 14:0}
+    df['zone_row'] = zone.map(_zone_row).fillna(0).astype(int)
+    df['zone_col'] = zone.map(_zone_col).fillna(0).astype(int)
+
+    print(f"  피처 엔지니어링 완료: is_two_strike, is_first_pitch, balls_minus_strikes, zone_row, zone_col 추가")
+    return df
+
+
+def _run_single_experiment(exp: dict, df_base: pd.DataFrame) -> dict:
+    """
+    단일 실험을 실행하고 결과를 반환합니다.
+    각 실험은 독립된 W&B run으로 기록됩니다.
+
+    :param exp:     EXPERIMENTS 항목 (run_name, hidden_dims, use_lr_scheduler, use_feature_engineering)
+    :param df_base: _preprocess_raw() 완료된 기본 DataFrame
+    :return:        {"run_name": ..., "best_val_loss": ..., "final_val_acc": ...}
+    """
+    print(f"\n{'='*60}")
+    print(f"실험 시작: {exp['run_name']}")
+    print(f"  설명: {exp['description']}")
+    print(f"{'='*60}")
+
+    run = wandb.init(
+        project="SmartPitch-Portfolio",
+        name=exp["run_name"],
+        config={
+            "data":                    "2023 MLB Full Season",
+            "epochs":                  EPOCHS,
+            "batch_size":              BATCH_SIZE,
+            "learning_rate":           LR,
+            "hidden_dims":             exp["hidden_dims"],
+            "dropout_rate":            0.2,
+            "use_lr_scheduler":        exp["use_lr_scheduler"],
+            "use_feature_engineering": exp["use_feature_engineering"],
+            "description":             exp["description"],
+        }
+    )
+
+    try:
+        df = df_base.copy()
+        if exp["use_feature_engineering"]:
+            df = _add_engineered_features(df)
+
+        model = TransitionProbabilityModel(df=df, batch_size=BATCH_SIZE, lr=LR)
+        model.run_modeling_pipeline(
+            epochs=EPOCHS,
+            hidden_dims=exp["hidden_dims"],
+            upload_artifact=False,
+            use_lr_scheduler=exp["use_lr_scheduler"],
+        )
+
+        best_val_loss = wandb.run.summary.get("val_loss",      float('nan'))
+        final_val_acc = wandb.run.summary.get("val_accuracy",  float('nan'))
+
+        # 실험별 모델 가중치 및 메타데이터를 각자 경로에 보관
+        # → main()에서 best 실험의 파일을 universal 경로로 복사
+        os.makedirs(DATA_DIR, exist_ok=True)
+        exp_model_path = os.path.join(_ROOT, f'best_model_{exp["run_name"]}.pth')
+        exp_feat_path  = os.path.join(DATA_DIR, f'feature_columns_{exp["run_name"]}.json')
+        exp_cls_path   = os.path.join(DATA_DIR, f'target_classes_{exp["run_name"]}.json')
+
+        if os.path.exists(MODEL_TMP_PATH):
+            shutil.copy(MODEL_TMP_PATH, exp_model_path)
+        with open(exp_feat_path, 'w', encoding='utf-8') as f:
+            json.dump(model.feature_columns, f, ensure_ascii=False, indent=2)
+        with open(exp_cls_path, 'w', encoding='utf-8') as f:
+            json.dump(model.target_classes, f, ensure_ascii=False, indent=2)
+
+        return {
+            "run_name":       exp["run_name"],
+            "description":    exp["description"],
+            "best_val_loss":  best_val_loss,
+            "final_val_acc":  final_val_acc,
+            "model_path":     exp_model_path,
+            "feat_path":      exp_feat_path,
+            "cls_path":       exp_cls_path,
+        }
+
+    finally:
+        wandb.finish()
+
+
 def main():
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
     print("=" * 60)
-    print("SmartPitch 범용 전이 모델 학습")
+    print("SmartPitch 범용 전이 모델 개선 실험 (3종)")
     print(f"  데이터: {START_DATE} ~ {END_DATE} (2023 MLB 전체 시즌)")
-    print(f"  epochs={EPOCHS}, batch_size={BATCH_SIZE}, lr={LR}")
+    print(f"  Baseline: hidden_dims=[128,64], val_acc=57.9%, val_loss=1.0219")
     print("=" * 60)
 
-    run = wandb.init(
+    # ── 1. 전체 시즌 데이터 수집 (1회, 캐시 재활용) ──────────────────────────
+    print(f"\n[공통] 전체 Statcast 데이터 수집 ({START_DATE} ~ {END_DATE})")
+    raw_df = statcast(start_dt=START_DATE, end_dt=END_DATE)
+    if raw_df.empty:
+        raise ValueError("데이터 수집 실패. 날짜 범위를 확인하세요.")
+    print(f"  수집 완료: {len(raw_df):,}건")
+
+    # ── 2. 기본 전처리 (모든 실험 공통) ─────────────────────────────────────
+    print("\n[공통] raw statcast 데이터 전처리")
+    df_base = _preprocess_raw(raw_df)
+    del raw_df
+
+    # ── 3. 실험 순차 실행 ────────────────────────────────────────────────────
+    results = []
+    best_model_result = None
+    best_val_loss_overall = float('inf')
+
+    for exp in EXPERIMENTS:
+        result = _run_single_experiment(exp, df_base)
+        results.append(result)
+        if result["best_val_loss"] < best_val_loss_overall:
+            best_val_loss_overall = result["best_val_loss"]
+            best_model_result = exp
+
+    del df_base
+
+    # ── 4. 최고 실험의 모델+메타데이터를 universal 경로로 복사 ──────────────
+    best_result = min(results, key=lambda r: r["best_val_loss"])
+    print(f"\n[저장] 최고 실험: {best_result['run_name']} (val_loss={best_result['best_val_loss']:.4f})")
+
+    shutil.copy(best_result["model_path"], MODEL_SAVE_PATH)
+    shutil.copy(best_result["feat_path"],  FEATURE_COLS_PATH)
+    shutil.copy(best_result["cls_path"],   TARGET_CLS_PATH)
+    print(f"  가중치 저장:          {MODEL_SAVE_PATH}")
+    print(f"  feature_columns 저장: {FEATURE_COLS_PATH}")
+    print(f"  target_classes 저장:  {TARGET_CLS_PATH}")
+
+    # ── 5. W&B Artifact 업로드 ───────────────────────────────────────────────
+    _upload_run = wandb.init(
         project="SmartPitch-Portfolio",
-        name="Universal_MLP_2023",
-        config={
-            "data": "2023 MLB Full Season",
-            "epochs": EPOCHS,
-            "batch_size": BATCH_SIZE,
-            "learning_rate": LR,
-            "hidden_dims": [128, 64],
-            "dropout_rate": 0.2,
-        }
+        name="Universal_MLP_BestModel_Upload",
+        config={"best_experiment": best_result["run_name"]},
     )
-
     try:
-        # ── 1. 전체 시즌 데이터 수집 ─────────────────────────────────────────
-        print(f"\n[단계 1] 전체 Statcast 데이터 수집 ({START_DATE} ~ {END_DATE})")
-        raw_df = statcast(start_dt=START_DATE, end_dt=END_DATE)
-        if raw_df.empty:
-            raise ValueError("데이터 수집 실패. 날짜 범위를 확인하세요.")
-        print(f"  수집 완료: {len(raw_df):,}건")
-
-        # ── 2. 전처리 ────────────────────────────────────────────────────────
-        print("\n[단계 2] raw statcast 데이터 전처리")
-        df_processed = _preprocess_raw(raw_df)
-        del raw_df  # 원본 72만 건 메모리 즉시 해제
-
-        # ── 3. 모델 학습 ─────────────────────────────────────────────────────
-        print(f"\n[단계 3] TransitionProbabilityModel 학습")
-        model = TransitionProbabilityModel(df=df_processed, batch_size=BATCH_SIZE, lr=LR)
-        model.run_modeling_pipeline(epochs=EPOCHS, upload_artifact=False)
-        del df_processed  # One-Hot 배열 메모리 해제
-
-        # ── 4. 범용 경로로 모델 이동, 메타데이터 저장 ───────────────────────
-        print("\n[단계 4] 모델 및 메타데이터 저장")
-        shutil.move(MODEL_TMP_PATH, MODEL_SAVE_PATH)
-        print(f"  가중치 저장: {MODEL_SAVE_PATH}")
-
-        os.makedirs(DATA_DIR, exist_ok=True)
-        with open(FEATURE_COLS_PATH, 'w', encoding='utf-8') as f:
-            json.dump(model.feature_columns, f, ensure_ascii=False, indent=2)
-        print(f"  feature_columns 저장: {FEATURE_COLS_PATH}")
-
-        with open(TARGET_CLS_PATH, 'w', encoding='utf-8') as f:
-            json.dump(model.target_classes, f, ensure_ascii=False, indent=2)
-        print(f"  target_classes 저장: {TARGET_CLS_PATH}")
-
-        # ── 5. W&B Artifact 업로드 ───────────────────────────────────────────
-        print("\n[단계 5] W&B Artifact 업로드 (universal_transition_mlp)")
         artifact = wandb.Artifact(name="universal_transition_mlp", type="model")
         artifact.add_file(MODEL_SAVE_PATH)
         artifact.add_file(FEATURE_COLS_PATH)
         artifact.add_file(TARGET_CLS_PATH)
         wandb.log_artifact(artifact)
-        print("  업로드 완료")
-
-        print("\n" + "=" * 60)
-        print("범용 전이 모델 학습 완료!")
-        print(f"  모델:      {MODEL_SAVE_PATH}")
-        print(f"  컬럼 목록: {FEATURE_COLS_PATH}")
-        print(f"  클래스:    {TARGET_CLS_PATH}")
-        print("  main.py에서 USE_UNIVERSAL_MODEL=True로 설정하면 이 모델을 사용합니다.")
-        print("=" * 60)
-
+        print("  W&B Artifact 업로드 완료: universal_transition_mlp")
     finally:
         wandb.finish()
+
+    # 실험별 임시 파일 정리
+    for r in results:
+        for fpath in [r["model_path"], r["feat_path"], r["cls_path"]]:
+            if os.path.exists(fpath):
+                os.remove(fpath)
+    if os.path.exists(MODEL_TMP_PATH):
+        os.remove(MODEL_TMP_PATH)
+
+    # ── 5. 결과 비교 테이블 출력 ─────────────────────────────────────────────
+    print("\n" + "=" * 70)
+    print("실험 결과 비교")
+    print("=" * 70)
+    print(f"{'실험':<40} {'Val Loss':>10} {'Val Acc':>10}")
+    print("-" * 70)
+    print(f"{'[Baseline] hidden=[128,64], no scheduler':<40} {'1.0219':>10} {'57.9%':>10}")
+    for r in results:
+        acc_str = f"{r['final_val_acc']:.1%}" if r['final_val_acc'] == r['final_val_acc'] else "N/A"
+        loss_str = f"{r['best_val_loss']:.4f}" if r['best_val_loss'] == r['best_val_loss'] else "N/A"
+        label = r['run_name'].replace("Universal_MLP_", "")
+        print(f"  {label:<38} {loss_str:>10} {acc_str:>10}")
+    print("=" * 70)
+
+    print("\n범용 전이 모델 개선 실험 완료.")
+    print("main.py에서 USE_UNIVERSAL_MODEL=True로 설정하면 저장된 모델을 사용합니다.")
 
 
 if __name__ == "__main__":

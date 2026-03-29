@@ -208,6 +208,12 @@ class TransitionProbabilityModel:
             'on_3b':   self.df['on_3b'].astype(int),
         })
 
+        # 실험적 파생 피처: 해당 컬럼이 df에 있을 때만 추가 (Exp3 feature engineering용)
+        _optional_feats = ['is_two_strike', 'is_first_pitch', 'balls_minus_strikes', 'zone_row', 'zone_col']
+        for _feat in _optional_feats:
+            if _feat in self.df.columns:
+                X_num[_feat] = self.df[_feat].astype(float)
+
         # ── [One-Hot Encoding: 구종/존/타자군집/투수군집] ────────────────────────
         # 최종 입력 차원: 수치(6) + pitch_name(9) + zone(13) + batter(8) + pitcher(4) ≈ 40차원
         X_cat = self.df[['mapped_pitch_name', 'zone', 'batter_cluster', 'pitcher_cluster']]
@@ -254,16 +260,24 @@ class TransitionProbabilityModel:
         return train_loader, val_loader, input_dim, output_dim
 
     def train_model(self, epochs: int = 50, hidden_dims: List[int] = [128, 64], dropout_rate: float = 0.2,
-                    patience: int = 5):
+                    patience: int = 5, use_lr_scheduler: bool = False):
         """
         PyTorch MLP 모델을 학습하고 검증 성능을 W&B에 로깅.
         val_loss 기준 EarlyStopping 적용 (patience=5 기본값).
+        use_lr_scheduler=True 시 ReduceLROnPlateau 스케줄러 적용.
         """
         train_loader, val_loader, input_dim, output_dim = self._prepare_data()
 
         self.model = MLP(input_dim, output_dim, hidden_dims, dropout_rate).to(self.device)
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
+
+        scheduler = None
+        if use_lr_scheduler:
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer, mode='min', factor=0.5, patience=3, min_lr=1e-5
+            )
+            print(f"LR 스케줄러 활성화: ReduceLROnPlateau (factor=0.5, patience=3)")
 
         print(f"모델 학습 시작 (최대 {epochs} Epochs, EarlyStopping patience={patience})...")
         best_val_loss = float('inf')
@@ -307,17 +321,23 @@ class TransitionProbabilityModel:
             val_loss /= len(val_loader.dataset)
             val_acc = correct / total
 
+            # --- LR 스케줄러 업데이트 ---
+            current_lr = optimizer.param_groups[0]['lr']
+            if scheduler is not None:
+                scheduler.step(val_loss)
+
             # --- W&B 로깅 ---
             if wandb.run:
                 wandb.log({
                     "epoch": epoch,
                     "train_loss": train_loss,
                     "val_loss": val_loss,
-                    "val_accuracy": val_acc
+                    "val_accuracy": val_acc,
+                    "learning_rate": current_lr,
                 })
 
             if epoch % 5 == 0 or epoch == 1:
-                print(f"Epoch [{epoch}/{epochs}] Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.4f}")
+                print(f"Epoch [{epoch}/{epochs}] Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.4f} | LR: {current_lr:.6f}")
 
             # --- EarlyStopping + 최고 모델 저장 ---
             if val_loss < best_val_loss:
@@ -353,12 +373,13 @@ class TransitionProbabilityModel:
         else:
             print("W&B run이 활성화되어 있지 않아 모델 아티팩트를 업로드할 수 없습니다.")
 
-    def run_modeling_pipeline(self, epochs: int = 50, hidden_dims: List[int] = None, upload_artifact: bool = True):
+    def run_modeling_pipeline(self, epochs: int = 50, hidden_dims: List[int] = None,
+                              upload_artifact: bool = True, use_lr_scheduler: bool = False):
         """
         데이터 준비부터 모델 학습, W&B 로깅 및 아티팩트 업로드까지 일괄 수행
         hidden_dims가 None이면 train_model() 기본값([128, 64]) 사용
         """
-        kwargs = {"epochs": epochs}
+        kwargs = {"epochs": epochs, "use_lr_scheduler": use_lr_scheduler}
         if hidden_dims is not None:
             kwargs["hidden_dims"] = hidden_dims
         self.train_model(**kwargs)
