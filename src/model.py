@@ -43,6 +43,7 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import confusion_matrix, classification_report
 from typing import Tuple, Dict, Any, List
 
 class PitchDataset(Dataset):
@@ -231,6 +232,14 @@ class TransitionProbabilityModel:
         y_encoded = self.label_encoder.fit_transform(y_raw)
         self.target_classes = self.label_encoder.classes_.tolist()
 
+        # ── [클래스 분포 출력] ────────────────────────────────────────────────────
+        total_samples = len(y_encoded)
+        print(f"\n[클래스 분포 — 전체 {total_samples:,}건]")
+        for label_idx, cls_name in enumerate(self.target_classes):
+            cnt = int((y_encoded == label_idx).sum())
+            print(f"  {cls_name:<20}: {cnt:>7}건  ({cnt / total_samples:.1%})")
+        print()
+
         # ── [희귀 클래스 제거] ────────────────────────────────────────────────────
         # train_test_split의 stratify 옵션은 각 클래스가 최소 2개 이상의 샘플을 요구함
         # 1개뿐인 클래스(예: 매우 드문 결과 코드)는 stratify 오류를 일으키므로 제거
@@ -281,6 +290,7 @@ class TransitionProbabilityModel:
 
         print(f"모델 학습 시작 (최대 {epochs} Epochs, EarlyStopping patience={patience})...")
         best_val_loss = float('inf')
+        best_val_acc  = 0.0
         patience_counter = 0
 
         for epoch in range(1, epochs + 1):
@@ -342,6 +352,7 @@ class TransitionProbabilityModel:
             # --- EarlyStopping + 최고 모델 저장 ---
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
+                best_val_acc  = val_acc
                 patience_counter = 0
                 torch.save(self.model.state_dict(), "best_transition_model.pth")
             else:
@@ -352,10 +363,52 @@ class TransitionProbabilityModel:
                         wandb.log({"early_stop_epoch": epoch})
                     break
 
-        print("학습 완료! 최고 검증 손실(Best Val Loss):", f"{best_val_loss:.4f}")
+        print(f"학습 완료! 최고 검증 손실(Best Val Loss): {best_val_loss:.4f}  |  Best Val Acc: {best_val_acc:.4f}")
 
         # 가장 좋았던 모델 로드
         self.model.load_state_dict(torch.load("best_transition_model.pth", weights_only=True))
+
+        # --- Confusion Matrix + Per-class Metrics (val set 기준) ---
+        self.model.eval()
+        all_preds, all_labels = [], []
+        with torch.no_grad():
+            for X_batch, y_batch in val_loader:
+                outputs = self.model(X_batch.to(self.device))
+                _, predicted = torch.max(outputs, 1)
+                all_preds.extend(predicted.cpu().numpy())
+                all_labels.extend(y_batch.numpy())
+
+        all_preds  = np.array(all_preds)
+        all_labels = np.array(all_labels)
+
+        cm     = confusion_matrix(all_labels, all_preds)
+        report = classification_report(
+            all_labels, all_preds,
+            target_names=self.target_classes,
+            digits=3,
+            zero_division=0,
+        )
+        print("\n[Confusion Matrix (Val set)]")
+        header = "          " + "  ".join(f"{c[:8]:>8}" for c in self.target_classes)
+        print(header)
+        for i, row in enumerate(cm):
+            row_str = f"{self.target_classes[i][:8]:<10}" + "  ".join(f"{v:>8}" for v in row)
+            print(row_str)
+        print("\n[Per-class Precision / Recall / F1 (Val set)]")
+        print(report)
+
+        # --- W&B summary 명시적 세팅 ---
+        if wandb.run:
+            wandb.run.summary["best_val_loss"] = best_val_loss
+            wandb.run.summary["best_val_acc"]  = best_val_acc
+            wandb.log({
+                "confusion_matrix": wandb.plot.confusion_matrix(
+                    probs=None,
+                    y_true=all_labels.tolist(),
+                    preds=all_preds.tolist(),
+                    class_names=self.target_classes,
+                )
+            })
 
     def upload_model_artifact(self, artifact_name: str = "transition_mlp_model"):
         """

@@ -323,16 +323,8 @@ def main():
 
     # ── 3. 실험 순차 실행 ────────────────────────────────────────────────────
     results = []
-    best_model_result = None
-    best_val_loss_overall = float('inf')
-
     for exp in EXPERIMENTS:
-        result = _run_single_experiment(exp, df_base)
-        results.append(result)
-        if result["best_val_loss"] < best_val_loss_overall:
-            best_val_loss_overall = result["best_val_loss"]
-            best_model_result = exp
-
+        results.append(_run_single_experiment(exp, df_base))
     del df_base
 
     # ── 4. 최고 실험의 모델+메타데이터를 universal 경로로 복사 ──────────────
