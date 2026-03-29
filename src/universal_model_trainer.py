@@ -114,25 +114,28 @@ LR         = 0.001
 # Baseline: hidden_dims=[128,64], no scheduler, no feature engineering (이전 run 참고)
 EXPERIMENTS = [
     {
-        "run_name":               "Universal_MLP_Exp1_BiggerModel",
-        "description":            "모델 크기 확장: [256, 128, 64]",
-        "hidden_dims":            [256, 128, 64],
-        "use_lr_scheduler":       False,
+        "run_name":                "Universal_MLP_Exp1_BiggerModel",
+        "description":             "모델 크기 확장: [256, 128, 64]",
+        "hidden_dims":             [256, 128, 64],
+        "use_lr_scheduler":        False,
+        "use_class_weights":       False,
         "use_feature_engineering": False,
     },
     {
-        "run_name":               "Universal_MLP_Exp2_LRScheduler",
-        "description":            "ReduceLROnPlateau 스케줄러 추가 (factor=0.5, patience=3)",
-        "hidden_dims":            [128, 64],
-        "use_lr_scheduler":       True,
+        "run_name":                "Universal_MLP_Exp2_LRScheduler",
+        "description":             "ReduceLROnPlateau 스케줄러 추가 (factor=0.5, patience=3)",
+        "hidden_dims":             [128, 64],
+        "use_lr_scheduler":        True,
+        "use_class_weights":       False,
         "use_feature_engineering": False,
     },
     {
-        "run_name":               "Universal_MLP_Exp3_FeatureEng",
-        "description":            "파생 피처 추가: is_two_strike, is_first_pitch, balls_minus_strikes, zone_row, zone_col",
-        "hidden_dims":            [128, 64],
-        "use_lr_scheduler":       False,
-        "use_feature_engineering": True,
+        "run_name":                "Universal_MLP_Exp3_ClassWeights",
+        "description":             "클래스 가중 CrossEntropyLoss: 소수 클래스(foul, hit_into_play) recall 개선",
+        "hidden_dims":             [128, 64],
+        "use_lr_scheduler":        False,
+        "use_class_weights":       True,
+        "use_feature_engineering": False,
     },
 ]
 
@@ -249,6 +252,7 @@ def _run_single_experiment(exp: dict, df_base: pd.DataFrame) -> dict:
             "hidden_dims":             exp["hidden_dims"],
             "dropout_rate":            0.2,
             "use_lr_scheduler":        exp["use_lr_scheduler"],
+            "use_class_weights":       exp["use_class_weights"],
             "use_feature_engineering": exp["use_feature_engineering"],
             "description":             exp["description"],
         }
@@ -265,6 +269,7 @@ def _run_single_experiment(exp: dict, df_base: pd.DataFrame) -> dict:
             hidden_dims=exp["hidden_dims"],
             upload_artifact=False,
             use_lr_scheduler=exp["use_lr_scheduler"],
+            use_class_weights=exp["use_class_weights"],
         )
 
         # train_model()이 wandb.run.summary에 best_val_loss/acc를 세팅함

@@ -196,6 +196,16 @@ class TransitionProbabilityModel:
             self.df['pitcher_cluster'] = "0"
             print(f"[Model] Error loading pitcher cluster csv: {e}")
 
+        # ── [hit_by_pitch 제거] ───────────────────────────────────────────────────
+        # 전체의 0.3%이며 투수의 의도적 선택이 아닌 비의도적 결과.
+        # 극소수 클래스로 인한 학습 불균형(F1=0.000)을 방지하기 위해 제거.
+        # X_num/X_cat 구성 전에 필터링해야 인덱스 불일치 없음.
+        _hbp_mask = self.df['description'] != 'hit_by_pitch'
+        _removed  = (~_hbp_mask).sum()
+        if _removed > 0:
+            self.df = self.df[_hbp_mask].reset_index(drop=True)
+            print(f"  hit_by_pitch 제거: {_removed:,}건 → 남은 데이터: {len(self.df):,}건")
+
         # ── [수치 피처: 볼카운트/아웃/주자] ─────────────────────────────────────
         # count_state one-hot(288차원) 대신 6개 정수로 직접 표현 (B안 입력 재설계)
         # 카운트 간 일반화 가능: "2-2_2_000"과 "1-2_2_000"의 공통 패턴을 학습
@@ -225,16 +235,6 @@ class TransitionProbabilityModel:
         # ── [수치 + 카테고리 결합] ──────────────────────────────────────────────
         X_encoded = pd.concat([X_num.reset_index(drop=True), X_cat_encoded.reset_index(drop=True)], axis=1).astype(float)
         self.feature_columns = X_encoded.columns.tolist()  # MDP/RL에서 동일 컬럼 순서로 입력 구성 시 사용
-
-        # ── [hit_by_pitch 제거] ───────────────────────────────────────────────────
-        # 전체의 0.3%이며 투수의 의도적 선택이 아닌 비의도적 결과.
-        # 극소수 클래스로 인한 학습 불균형(F1=0.000)을 방지하기 위해 제거.
-        _hbp_mask = self.df['description'] != 'hit_by_pitch'
-        _removed  = (~_hbp_mask).sum()
-        if _removed > 0:
-            self.df = self.df[_hbp_mask].reset_index(drop=True)
-            y_raw   = self.df['description']
-            print(f"  hit_by_pitch 제거: {_removed:,}건 → 남은 데이터: {len(self.df):,}건")
 
         # ── [Label Encoding] ─────────────────────────────────────────────────────
         # 투구 결과(description)를 정수 레이블로 변환
@@ -279,16 +279,32 @@ class TransitionProbabilityModel:
         return train_loader, val_loader, input_dim, output_dim
 
     def train_model(self, epochs: int = 50, hidden_dims: List[int] = [128, 64], dropout_rate: float = 0.2,
-                    patience: int = 5, use_lr_scheduler: bool = False):
+                    patience: int = 5, use_lr_scheduler: bool = False, use_class_weights: bool = False):
         """
         PyTorch MLP 모델을 학습하고 검증 성능을 W&B에 로깅.
         val_loss 기준 EarlyStopping 적용 (patience=5 기본값).
-        use_lr_scheduler=True 시 ReduceLROnPlateau 스케줄러 적용.
+        use_lr_scheduler=True  : ReduceLROnPlateau 스케줄러 적용.
+        use_class_weights=True : 클래스 빈도 역수로 CrossEntropyLoss 가중치 설정.
+                                 소수 클래스(foul, hit_into_play) recall 개선 목적.
         """
         train_loader, val_loader, input_dim, output_dim = self._prepare_data()
 
         self.model = MLP(input_dim, output_dim, hidden_dims, dropout_rate).to(self.device)
-        criterion = nn.CrossEntropyLoss()
+
+        if use_class_weights:
+            # 훈련 데이터 클래스 빈도 계산 → 역수 가중치 (평균=1 정규화)
+            y_train_np = train_loader.dataset.y.numpy()
+            counts = np.bincount(y_train_np, minlength=output_dim).astype(float)
+            weights = 1.0 / np.where(counts > 0, counts, 1.0)
+            weights = weights / weights.mean()
+            weight_tensor = torch.FloatTensor(weights).to(self.device)
+            criterion = nn.CrossEntropyLoss(weight=weight_tensor)
+            print("클래스 가중치 적용:")
+            for i, cls in enumerate(self.target_classes):
+                print(f"  {cls:<20}: count={int(counts[i]):>7}  weight={weights[i]:.4f}")
+        else:
+            criterion = nn.CrossEntropyLoss()
+
         optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
 
         scheduler = None
@@ -437,12 +453,17 @@ class TransitionProbabilityModel:
             print("W&B run이 활성화되어 있지 않아 모델 아티팩트를 업로드할 수 없습니다.")
 
     def run_modeling_pipeline(self, epochs: int = 50, hidden_dims: List[int] = None,
-                              upload_artifact: bool = True, use_lr_scheduler: bool = False):
+                              upload_artifact: bool = True, use_lr_scheduler: bool = False,
+                              use_class_weights: bool = False):
         """
         데이터 준비부터 모델 학습, W&B 로깅 및 아티팩트 업로드까지 일괄 수행
         hidden_dims가 None이면 train_model() 기본값([128, 64]) 사용
         """
-        kwargs = {"epochs": epochs, "use_lr_scheduler": use_lr_scheduler}
+        kwargs = {
+            "epochs": epochs,
+            "use_lr_scheduler": use_lr_scheduler,
+            "use_class_weights": use_class_weights,
+        }
         if hidden_dims is not None:
             kwargs["hidden_dims"] = hidden_dims
         self.train_model(**kwargs)
