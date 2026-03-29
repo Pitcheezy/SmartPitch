@@ -17,7 +17,7 @@ model.py — 투구 결과 전이 확률 예측 MLP 모델
     - pitcher_cluster: 투수 유형 (0~K-1, pitcher_clusters_2023.csv, 현재 K=4)
 
 출력:
-    - 투구 결과 클래스 확률 (strike/foul/ball/hit_by_pitch/hit_into_play 5종)
+    - 투구 결과 클래스 확률 (ball/strike/foul/hit_into_play 4종, hit_by_pitch 제거됨)
     - predict_proba(): softmax 확률 벡터 반환
 
 MLP 구조:

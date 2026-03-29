@@ -303,6 +303,7 @@ class PitchEnv(gym.Env):
                 self.balls, self.strikes = 0, 0
 
         # ── 사구(HBP) ─────────────────────────────────────────────────────────
+        # 범용 모델(4클래스)에서는 HBP가 발생하지 않음. 단일 투수 모드 전용.
         elif outcome == "hit_by_pitch":
             runs = self._apply_walk()
             self.balls, self.strikes = 0, 0

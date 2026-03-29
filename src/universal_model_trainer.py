@@ -112,7 +112,7 @@ LR         = 0.001
 
 # ── 실험 설정 ────────────────────────────────────────────────────────────────
 # 각 실험은 독립된 W&B run으로 기록됩니다.
-# Baseline: hidden_dims=[128,64], no scheduler, no feature engineering (이전 run 참고)
+# Baseline: hidden_dims=[128,64], 4클래스(ball/strike/foul/hit_into_play), val_acc=57.9% (이전 run 참고)
 EXPERIMENTS = [
     {
         "run_name":                "Universal_MLP_Exp1_BiggerModel",
@@ -322,7 +322,7 @@ def main():
     print("=" * 60)
     print("SmartPitch 범용 전이 모델 개선 실험 (3종)")
     print(f"  데이터: {START_DATE} ~ {END_DATE} (2023 MLB 전체 시즌)")
-    print(f"  Baseline: hidden_dims=[128,64], val_acc=57.9%, val_loss=1.0219")
+    print(f"  Baseline: hidden_dims=[128,64], 4클래스, val_acc=57.9%, val_loss=1.0219")
     print("=" * 60)
 
     # ── 1. 전체 시즌 데이터 수집 (1회, 캐시 재활용) ──────────────────────────
@@ -389,7 +389,7 @@ def main():
     print("=" * 70)
     print(f"{'실험':<40} {'Val Acc':>10} {'Val Loss':>10}  (선정기준: Val Acc↑)")
     print("-" * 70)
-    print(f"{'[Baseline] hidden=[128,64], no scheduler':<40} {'57.9%':>10} {'1.0219':>10}")
+    print(f"{'[Baseline] hidden=[128,64], 4클래스':<40} {'57.9%':>10} {'1.0219':>10}")
     for r in results:
         acc_str  = f"{r['final_val_acc']:.1%}"  if r['final_val_acc']  == r['final_val_acc']  else "N/A"
         loss_str = f"{r['best_val_loss']:.4f}"  if r['best_val_loss']  == r['best_val_loss']  else "N/A"
