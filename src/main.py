@@ -164,6 +164,7 @@ def main(player_first_name, player_last_name, start_date, end_date):
                 model_path=os.path.join(_root, "best_transition_model_universal.pth"),
                 feature_columns_path=os.path.join(_root, "data", "feature_columns_universal.json"),
                 target_classes_path=os.path.join(_root, "data", "target_classes_universal.json"),
+                model_config_path=os.path.join(_root, "data", "model_config_universal.json"),
             )
         else:
             print("\n[단계 3] 상태 전이 확률 예측(MLP) 모델 학습 (단일 투수 데이터)")

@@ -101,6 +101,7 @@ MODEL_TMP_PATH    = os.path.join(_ROOT, 'best_transition_model.pth')           #
 MODEL_SAVE_PATH   = os.path.join(_ROOT, 'best_transition_model_universal.pth') # 최종 저장 위치
 FEATURE_COLS_PATH = os.path.join(DATA_DIR, 'feature_columns_universal.json')
 TARGET_CLS_PATH   = os.path.join(DATA_DIR, 'target_classes_universal.json')
+MODEL_CONFIG_PATH = os.path.join(DATA_DIR, 'model_config_universal.json')      # 아키텍처 설정(hidden_dims 등)
 
 # ── 하이퍼파라미터 ──────────────────────────────────────────────────────────
 START_DATE = "2023-03-30"
@@ -286,12 +287,17 @@ def _run_single_experiment(exp: dict, df_base: pd.DataFrame) -> dict:
         exp_feat_path  = os.path.join(DATA_DIR, f'feature_columns_{exp["run_name"]}.json')
         exp_cls_path   = os.path.join(DATA_DIR, f'target_classes_{exp["run_name"]}.json')
 
+        exp_cfg_path = os.path.join(DATA_DIR, f'model_config_{exp["run_name"]}.json')
+
         if os.path.exists(MODEL_TMP_PATH):
             shutil.copy(MODEL_TMP_PATH, exp_model_path)
         with open(exp_feat_path, 'w', encoding='utf-8') as f:
             json.dump(model.feature_columns, f, ensure_ascii=False, indent=2)
         with open(exp_cls_path, 'w', encoding='utf-8') as f:
             json.dump(model.target_classes, f, ensure_ascii=False, indent=2)
+        # 아키텍처 설정 저장 — load_from_checkpoint()가 hidden_dims를 정확히 재현하기 위해 필수
+        with open(exp_cfg_path, 'w', encoding='utf-8') as f:
+            json.dump({"hidden_dims": exp["hidden_dims"], "dropout_rate": 0.2}, f, indent=2)
 
         return {
             "run_name":       exp["run_name"],
@@ -301,6 +307,7 @@ def _run_single_experiment(exp: dict, df_base: pd.DataFrame) -> dict:
             "model_path":     exp_model_path,
             "feat_path":      exp_feat_path,
             "cls_path":       exp_cls_path,
+            "cfg_path":       exp_cfg_path,
         }
 
     finally:
@@ -337,15 +344,19 @@ def main():
     del df_base
 
     # ── 4. 최고 실험의 모델+메타데이터를 universal 경로로 복사 ──────────────
-    best_result = min(results, key=lambda r: r["best_val_loss"])
-    print(f"\n[저장] 최고 실험: {best_result['run_name']} (val_loss={best_result['best_val_loss']:.4f})")
+    # 선정 기준: best_val_acc (val_loss는 class_weights 사용 시 스케일이 달라 비교 불가)
+    best_result = max(results, key=lambda r: r["final_val_acc"])
+    print(f"\n[저장] 최고 실험: {best_result['run_name']}"
+          f" (val_acc={best_result['final_val_acc']:.4f}, val_loss={best_result['best_val_loss']:.4f})")
 
     shutil.copy(best_result["model_path"], MODEL_SAVE_PATH)
     shutil.copy(best_result["feat_path"],  FEATURE_COLS_PATH)
     shutil.copy(best_result["cls_path"],   TARGET_CLS_PATH)
+    shutil.copy(best_result["cfg_path"],   MODEL_CONFIG_PATH)
     print(f"  가중치 저장:          {MODEL_SAVE_PATH}")
     print(f"  feature_columns 저장: {FEATURE_COLS_PATH}")
     print(f"  target_classes 저장:  {TARGET_CLS_PATH}")
+    print(f"  model_config 저장:    {MODEL_CONFIG_PATH}")
 
     # ── 5. W&B Artifact 업로드 ───────────────────────────────────────────────
     _upload_run = wandb.init(
@@ -358,6 +369,7 @@ def main():
         artifact.add_file(MODEL_SAVE_PATH)
         artifact.add_file(FEATURE_COLS_PATH)
         artifact.add_file(TARGET_CLS_PATH)
+        artifact.add_file(MODEL_CONFIG_PATH)
         wandb.log_artifact(artifact)
         print("  W&B Artifact 업로드 완료: universal_transition_mlp")
     finally:
@@ -365,7 +377,7 @@ def main():
 
     # 실험별 임시 파일 정리
     for r in results:
-        for fpath in [r["model_path"], r["feat_path"], r["cls_path"]]:
+        for fpath in [r["model_path"], r["feat_path"], r["cls_path"], r["cfg_path"]]:
             if os.path.exists(fpath):
                 os.remove(fpath)
     if os.path.exists(MODEL_TMP_PATH):
@@ -375,14 +387,15 @@ def main():
     print("\n" + "=" * 70)
     print("실험 결과 비교")
     print("=" * 70)
-    print(f"{'실험':<40} {'Val Loss':>10} {'Val Acc':>10}")
+    print(f"{'실험':<40} {'Val Acc':>10} {'Val Loss':>10}  (선정기준: Val Acc↑)")
     print("-" * 70)
-    print(f"{'[Baseline] hidden=[128,64], no scheduler':<40} {'1.0219':>10} {'57.9%':>10}")
+    print(f"{'[Baseline] hidden=[128,64], no scheduler':<40} {'57.9%':>10} {'1.0219':>10}")
     for r in results:
-        acc_str = f"{r['final_val_acc']:.1%}" if r['final_val_acc'] == r['final_val_acc'] else "N/A"
-        loss_str = f"{r['best_val_loss']:.4f}" if r['best_val_loss'] == r['best_val_loss'] else "N/A"
-        label = r['run_name'].replace("Universal_MLP_", "")
-        print(f"  {label:<38} {loss_str:>10} {acc_str:>10}")
+        acc_str  = f"{r['final_val_acc']:.1%}"  if r['final_val_acc']  == r['final_val_acc']  else "N/A"
+        loss_str = f"{r['best_val_loss']:.4f}"  if r['best_val_loss']  == r['best_val_loss']  else "N/A"
+        label    = r['run_name'].replace("Universal_MLP_", "")
+        marker   = " ✓" if r is best_result else ""
+        print(f"  {label:<38} {acc_str:>10} {loss_str:>10}{marker}")
     print("=" * 70)
 
     print("\n범용 전이 모델 개선 실험 완료.")

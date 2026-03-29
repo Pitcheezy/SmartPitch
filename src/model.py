@@ -44,7 +44,7 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import confusion_matrix, classification_report
-from typing import Tuple, Dict, Any, List
+from typing import Tuple, Dict, Any, List, Optional
 
 class PitchDataset(Dataset):
     """PyTorch 학습용 데이터셋 래퍼 — numpy 배열을 Tensor로 변환"""
@@ -108,21 +108,24 @@ class TransitionProbabilityModel:
         model_path: str,
         feature_columns_path: str,
         target_classes_path: str,
+        model_config_path: Optional[str] = None,
     ) -> "TransitionProbabilityModel":
         """
         저장된 가중치(.pth) / 특징 컬럼(.json) / 결과 클래스(.json)를 로드하여
         추론 전용 인스턴스를 반환합니다.
 
-        universal_model_trainer.py 가 생성한 아래 세 파일을 main.py에서
+        universal_model_trainer.py 가 생성한 아래 파일들을 main.py에서
         USE_UNIVERSAL_MODEL=True 로 사용할 때 호출됩니다.
 
             best_transition_model_universal.pth
             data/feature_columns_universal.json
             data/target_classes_universal.json
+            data/model_config_universal.json   ← hidden_dims/dropout_rate (선택)
 
         :param model_path:           .pth 파일 절대/상대 경로
         :param feature_columns_path: feature_columns_universal.json 경로
         :param target_classes_path:  target_classes_universal.json 경로
+        :param model_config_path:    model_config_universal.json 경로 (없으면 기본값 사용)
         :return: model.eval() 상태의 TransitionProbabilityModel 인스턴스
         """
         import json
@@ -141,7 +144,19 @@ class TransitionProbabilityModel:
         input_dim  = len(instance.feature_columns)
         output_dim = len(instance.target_classes)
 
-        instance.model = MLP(input_dim, output_dim).to(instance.device)
+        # 아키텍처 설정 로드 — 저장된 hidden_dims와 MLP가 반드시 일치해야 state_dict 로드 가능
+        hidden_dims   = [128, 64]  # fallback 기본값
+        dropout_rate  = 0.2
+        if model_config_path and os.path.exists(model_config_path):
+            with open(model_config_path, 'r', encoding='utf-8') as f:
+                model_config = json.load(f)
+            hidden_dims  = model_config.get("hidden_dims",  hidden_dims)
+            dropout_rate = model_config.get("dropout_rate", dropout_rate)
+            print(f"[UniversalModel] 아키텍처 로드: hidden_dims={hidden_dims}, dropout={dropout_rate}")
+        else:
+            print(f"[UniversalModel] model_config 없음 — 기본값 사용: hidden_dims={hidden_dims}")
+
+        instance.model = MLP(input_dim, output_dim, hidden_dims, dropout_rate).to(instance.device)
         instance.model.load_state_dict(
             torch.load(model_path, map_location=instance.device, weights_only=True)
         )
