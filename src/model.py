@@ -253,57 +253,60 @@ class TransitionProbabilityModel:
         
         return train_loader, val_loader, input_dim, output_dim
 
-    def train_model(self, epochs: int = 50, hidden_dims: List[int] = [128, 64], dropout_rate: float = 0.2):
+    def train_model(self, epochs: int = 50, hidden_dims: List[int] = [128, 64], dropout_rate: float = 0.2,
+                    patience: int = 5):
         """
-        PyTorch MLP 모델을 학습하고 검증 성능을 W&B에 로깅
+        PyTorch MLP 모델을 학습하고 검증 성능을 W&B에 로깅.
+        val_loss 기준 EarlyStopping 적용 (patience=5 기본값).
         """
         train_loader, val_loader, input_dim, output_dim = self._prepare_data()
-        
+
         self.model = MLP(input_dim, output_dim, hidden_dims, dropout_rate).to(self.device)
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
-        
-        print(f"모델 학습 시작 (총 {epochs} Epochs)...")
+
+        print(f"모델 학습 시작 (최대 {epochs} Epochs, EarlyStopping patience={patience})...")
         best_val_loss = float('inf')
-        
+        patience_counter = 0
+
         for epoch in range(1, epochs + 1):
             # --- Training Phase ---
             self.model.train()
             train_loss = 0.0
             for X_batch, y_batch in train_loader:
                 X_batch, y_batch = X_batch.to(self.device), y_batch.to(self.device)
-                
+
                 optimizer.zero_grad()
                 outputs = self.model(X_batch)
                 loss = criterion(outputs, y_batch)
-                
+
                 loss.backward()
                 optimizer.step()
-                
+
                 train_loss += loss.item() * X_batch.size(0)
-                
+
             train_loss /= len(train_loader.dataset)
-            
+
             # --- Validation Phase ---
             self.model.eval()
             val_loss = 0.0
             correct = 0
             total = 0
-            
+
             with torch.no_grad():
                 for X_batch, y_batch in val_loader:
                     X_batch, y_batch = X_batch.to(self.device), y_batch.to(self.device)
                     outputs = self.model(X_batch)
                     loss = criterion(outputs, y_batch)
-                    
+
                     val_loss += loss.item() * X_batch.size(0)
                     _, predicted = torch.max(outputs.data, 1)
                     total += y_batch.size(0)
                     correct += (predicted == y_batch).sum().item()
-                    
+
             val_loss /= len(val_loader.dataset)
             val_acc = correct / total
-            
+
             # --- W&B 로깅 ---
             if wandb.run:
                 wandb.log({
@@ -312,17 +315,25 @@ class TransitionProbabilityModel:
                     "val_loss": val_loss,
                     "val_accuracy": val_acc
                 })
-            
+
             if epoch % 5 == 0 or epoch == 1:
                 print(f"Epoch [{epoch}/{epochs}] Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.4f}")
-                
-            # 최고 성능 모델 가중치 임시 저장
+
+            # --- EarlyStopping + 최고 모델 저장 ---
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
+                patience_counter = 0
                 torch.save(self.model.state_dict(), "best_transition_model.pth")
-                
+            else:
+                patience_counter += 1
+                if patience_counter >= patience:
+                    print(f"Early stopping: epoch {epoch}에서 중단 (patience={patience}, best_val_loss={best_val_loss:.4f})")
+                    if wandb.run:
+                        wandb.log({"early_stop_epoch": epoch})
+                    break
+
         print("학습 완료! 최고 검증 손실(Best Val Loss):", f"{best_val_loss:.4f}")
-        
+
         # 가장 좋았던 모델 로드
         self.model.load_state_dict(torch.load("best_transition_model.pth", weights_only=True))
 
