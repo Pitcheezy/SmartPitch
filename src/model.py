@@ -216,7 +216,7 @@ class TransitionProbabilityModel:
         y_raw = self.df['description']
 
         # ── [수치 + 카테고리 결합] ──────────────────────────────────────────────
-        X_encoded = pd.concat([X_num.reset_index(drop=True), X_cat_encoded.reset_index(drop=True)], axis=1)
+        X_encoded = pd.concat([X_num.reset_index(drop=True), X_cat_encoded.reset_index(drop=True)], axis=1).astype(float)
         self.feature_columns = X_encoded.columns.tolist()  # MDP/RL에서 동일 컬럼 순서로 입력 구성 시 사용
 
         # ── [Label Encoding] ─────────────────────────────────────────────────────
