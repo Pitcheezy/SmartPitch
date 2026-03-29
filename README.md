@@ -19,9 +19,10 @@ Statcast 데이터 수집 (pybaseball)
 [3단계] 투수 군집화       pitcher_clustering.py  → data/pitcher_clusters_2023.csv
           │  15개 투구 지표로 MLB 투수를 4가지 유형으로 분류 (K=4, 실루엣 0.45)
           ▼
-[4단계] 전이 확률 모델    model.py               → best_transition_model.pth
-          │  (볼카운트 + 구종 + 코스 + 타자유형 + 투수유형) → 투구결과 확률
-          │  PyTorch MLP: Input → [128→64] → 결과클래스
+[4단계] 전이 확률 모델    model.py / universal_model_trainer.py
+          │  (볼카운트 + 구종 + 코스 + 타자유형 + 투수유형) → 투구결과 4클래스 확률
+          │  범용 모델: PyTorch MLP [256→128→64], 2023 MLB 전체 72만 건 학습
+          │  출력 클래스: ball / strike / foul / hit_into_play
           ▼
 [5단계] MDP 최적 정책    mdp_solver.py
           │  벨만 방정식 가치반복(5회) → 9,216개 상태 최적 구종/코스 정책표
@@ -52,8 +53,11 @@ paper_review/
 │   ├── pitch_env.py                 Gymnasium RL 환경
 │   └── rl_trainer.py                DQN 에이전트 학습/평가
 ├── data/
-│   ├── batter_clusters_2023.csv 타자 군집 매핑 (batter_id → cluster 0~7)
-│   └── pitcher_clusters_2023.csv투수 군집 매핑 (pitcher_id → cluster 0~3)
+│   ├── batter_clusters_2023.csv         타자 군집 매핑 (batter_id → cluster 0~7)
+│   ├── pitcher_clusters_2023.csv        투수 군집 매핑 (pitcher_id → cluster 0~3)
+│   ├── feature_columns_universal.json   범용 모델 입력 피처 목록
+│   ├── target_classes_universal.json    범용 모델 출력 클래스 목록 (4종)
+│   └── model_config_universal.json      범용 모델 아키텍처 설정 (hidden_dims, dropout_rate)
 ├── pyproject.toml               uv 의존성 정의
 ├── uv.lock                      정확한 버전 잠금 (팀 동기화 기준)
 ├── .python-version              Python 3.12 고정
@@ -99,6 +103,7 @@ uv run src/universal_model_trainer.py
 # → best_transition_model_universal.pth
 # → data/feature_columns_universal.json
 # → data/target_classes_universal.json
+# → data/model_config_universal.json
 
 # [메인 파이프라인] 특정 투수 분석 + DQN 학습
 uv run src/main.py
@@ -148,15 +153,13 @@ MDP 상태 키 형식 (문자열):
 
 ---
 
-## 현재 성능 지표 (Clayton Kershaw 2024, W&B run: cuafju1e)
+## 현재 성능 지표
 
 | 지표 | 값 | 비고 |
 |------|-----|------|
-| MLP val_accuracy | 47.1% | 투구결과 예측 정확도 |
-| MLP val_loss | 1.854 | train과 갭 0.43 (과적합 징후) |
-| DQN 평균 보상 | 0.235 | 이닝당 기대실점 억제량 |
-| DQN 탐색→활용 개선 | +0.035 | 학습 효과 소폭 확인 |
-| 주요 추천 구종 | Slider 59.6% | Kershaw 슬라이더 중심 학습 |
+| MLP val_accuracy | 58.1% | 범용 모델 Exp1 [256,128,64], 4클래스, 2023 MLB 72만 건 |
+| DQN 평균 보상 | 0.436 | Gerrit Cole 2019, 100이닝 평가 |
+| DQN 주요 구종 | Fastball 51.3%, Slider 24.3% | Cole 2019 시즌 실제 구종 비율과 유사 |
 
 ---
 
@@ -165,11 +168,8 @@ MDP 상태 키 형식 (문자열):
 ```
 우선순위  항목
 ─────────────────────────────────────────────────────────────
-[완료]     범용 전이 모델 학습 (universal_model_trainer.py)
-           → uv run src/universal_model_trainer.py 또는 W&B Artifact 다운로드
-           → best_transition_model_universal.pth (gitignore 대상, W&B Artifact로 관리)
-[완료]     MLP epochs 5 → 20 (batch_size 64 → 256)
 [High]     RE24 매트릭스 연도별 갱신 (현재 2019 고정)
+           → pitch_env.py와 mdp_solver.py 두 곳 동시 수정 필요
 [Medium]   batted ball 확률 단순화 (70/15/10/5%) → 실제 데이터 기반
 [Medium]   DQN timesteps 300K → 500K+, exploration 0.3 → 0.4
 [Low]      실시간 추천 API 서버 (FastAPI) 구현
@@ -196,6 +196,6 @@ MDP 상태 키 형식 (문자열):
 
 ## 다음 마일스톤
 
-1. **범용 전이 모델**: 전체 MLB 2023 데이터로 `model.py` 재학습 → val_acc 65% 목표
-2. **범용 DQN 재학습**: 모든 투수×타자 조합으로 500K 스텝 학습
+1. **RE24 갱신**: pitch_env.py + mdp_solver.py의 2019 고정값을 분석 시즌 기준으로 교체
+2. **DQN 강화**: total_timesteps 300K → 500K, exploration_fraction 0.30 → 0.40
 3. **실시간 추천 API**: 타석 상황 입력 → 구종·코스 추천 JSON 반환
