@@ -1,0 +1,48 @@
+=== 1. 존재 확인 ===
+[O] train_transition.parquet 존재함
+[O] val_transition.parquet 존재함
+[O] test_transition.parquet 존재함
+
+=== 2. Row 수 및 컬럼 목록 ===
+[TRAIN] Rows: 122,352, Columns: 21
+[VAL] Rows: 25,142, Columns: 21
+[TEST] Rows: 26,328, Columns: 21
+Columns list: ['game_pk', 'game_date', 'pitcher', 'batter', 'pitch_number', 'balls', 'strikes', 'outs_when_up', 'on_1b', 'on_2b', 'on_3b', 'count_state', 'mapped_pitch_name', 'zone', 'action_id', 'description', 'events', 'bb_type', 'outcome_class', 'outcome_id', 'split']
+
+=== 3. 필수 컬럼 확인 ===
+[O] 모든 필수 컬럼 존재함
+
+=== 4 & 5. outcome_class 분포 비율 ===
+[TRAIN] ball: 44,828 (36.6%), strike: 35,027 (28.6%), foul: 22,062 (18.0%), in_play: 20,435 (16.7%)
+[VAL] ball: 9,091 (36.2%), strike: 7,300 (29.0%), foul: 4,797 (19.1%), in_play: 3,954 (15.7%)
+[TEST] ball: 9,579 (36.4%), strike: 7,499 (28.5%), foul: 4,971 (18.9%), in_play: 4,279 (16.3%)
+
+=== 6. count_state 형식 확인 ===
+Sample states: ['0-0_1_110', '2-0_0_000', '3-2_2_000', '0-0_0_000', '0-0_2_100']
+[O] 모든 샘플이 올바른 포맷(balls-strikes_outs_runner123)입니다.
+
+=== 7. action_id 일관성 점검 ===
+[O] Transition Dataset과 Decision Dataset의 action_id 룰이 완벽히 동일함
+
+=== 8. selected_pitchers 외 투수 포함 여부 ===
+[O] [TRAIN] 모든 투수가 메타데이터 내에 존재함
+[O] [VAL] 모든 투수가 메타데이터 내에 존재함
+[O] [TEST] 모든 투수가 메타데이터 내에 존재함
+
+=== 9. 결측치 확인 ===
+[O] [TRAIN] 핵심 컬럼 결측치 없음
+[O] [VAL] 핵심 컬럼 결측치 없음
+[O] [TEST] 핵심 컬럼 결측치 없음
+
+=== 11. 샘플 데이터 (10 rows) 점검 ===
+       count_state mapped_pitch_name  zone  action_id    description outcome_class
+90487    0-1_1_110          453343_1    13        674           ball          ball
+50450    1-1_2_100          547943_3    13       3651           ball          ball
+87729    1-0_0_000          664208_0    11      11969           ball          ball
+22533    0-0_1_000          621244_4    14       8046           ball          ball
+117481   0-0_0_000          626929_1    13       8864           ball          ball
+63959    1-1_1_000          605397_1    13       6537           ball          ball
+105560   0-0_0_000          592222_1    12       4690           foul          foul
+110709   0-1_0_000          572955_0    12       4495           ball          ball
+48670    3-2_0_000          643230_2    12      10046           ball          ball
+2951     0-0_2_110          605540_2    14       6824  hit_into_play       in_play
