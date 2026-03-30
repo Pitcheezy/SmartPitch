@@ -409,18 +409,37 @@ class TransitionProbabilityModel:
         # 가장 좋았던 모델 로드
         self.model.load_state_dict(torch.load("best_transition_model.pth", weights_only=True))
 
-        # --- Confusion Matrix + Per-class Metrics (val set 기준) ---
+        # --- Confusion Matrix + Per-class Metrics + Top-K Accuracy (val set 기준) ---
         self.model.eval()
         all_preds, all_labels = [], []
+        all_outputs = []  # Top-K accuracy 계산용 logit 수집
         with torch.no_grad():
             for X_batch, y_batch in val_loader:
                 outputs = self.model(X_batch.to(self.device))
                 _, predicted = torch.max(outputs, 1)
                 all_preds.extend(predicted.cpu().numpy())
                 all_labels.extend(y_batch.numpy())
+                all_outputs.append(outputs.cpu())
 
         all_preds  = np.array(all_preds)
         all_labels = np.array(all_labels)
+
+        # --- Top-K Accuracy ---
+        # Top-1: 1등 예측만 정답이면 맞음 (= 기존 val_accuracy)
+        # Top-2: 상위 2개 중 정답이 있으면 맞음
+        # Top-3: 상위 3개 중 정답이 있으면 맞음
+        # MDP/DQN은 확률 분포 전체를 사용하므로 Top-K가 높을수록 정책 품질이 좋아짐
+        all_outputs_tensor = torch.cat(all_outputs, dim=0)
+        all_labels_tensor = torch.LongTensor(all_labels)
+        num_classes = all_outputs_tensor.shape[1]
+
+        print(f"\n[Top-K Accuracy (Val set, {num_classes}클래스)]")
+        for k in range(1, min(4, num_classes + 1)):
+            top_k_preds = torch.topk(all_outputs_tensor, k=k, dim=1).indices
+            top_k_acc = (top_k_preds == all_labels_tensor.unsqueeze(1)).any(dim=1).float().mean().item()
+            print(f"  Top-{k} Accuracy: {top_k_acc:.4f} ({top_k_acc:.1%})")
+            if wandb.run:
+                wandb.run.summary[f"top_{k}_accuracy"] = top_k_acc
 
         cm     = confusion_matrix(all_labels, all_preds)
         report = classification_report(
