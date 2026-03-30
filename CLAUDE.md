@@ -249,13 +249,16 @@ git log --oneline -5
 
 ---
 
-## 현재 성능 수치 (Kershaw 2024, W&B run: cuafju1e)
+## 현재 성능 수치
 
 ```
-MLP val_accuracy : 47.1%   ← epochs=5로 과소학습
-MLP val_loss     : 1.854   ← train/val 갭 0.43 (과적합 징후)
-DQN 평균 보상    : 0.235   ← 이닝당 기대실점 억제
-DQN 주요 구종    : Slider 59.6%, Fastball 18.7%
+[범용 모델 — Exp1 BiggerModel [256,128,64], 4클래스, 2023 MLB 72만 건]
+MLP val_accuracy : 58.1%
+MLP val_loss     : 1.0077  (unweighted CrossEntropyLoss)
+
+[DQN — Gerrit Cole 2019, W&B run: h4n3o0di]
+DQN 평균 보상    : 0.436   (100이닝 평가)
+DQN 주요 구종    : Fastball 51.3%, Slider 24.3%, Curveball 14.9%, Changeup 10.7%
 ```
 
 ---
@@ -270,17 +273,17 @@ DQN 주요 구종    : Slider 59.6%, Fastball 18.7%
 - [x] 상태 키 5-파트 형식 통일
 - [x] W&B Artifact: 데이터셋, MLP 모델, DQN 모델, 군집 CSV
 - [x] 모든 소스 파일 한국어 모듈 독스트링 및 인라인 주석
+- [x] 범용 전이 모델: `universal_model_trainer.py` 완성 (Exp1 [256,128,64], val_acc 58.1%)
+- [x] MLP epochs 5→20, batch_size 64→256, EarlyStopping(patience=5)
+- [x] 4클래스 전환: hit_by_pitch 제거, ball/strike/foul/hit_into_play
+- [x] `model_config_universal.json` 도입: load_from_checkpoint 아키텍처 불일치 방지
+- [x] class-weighted CrossEntropyLoss 실험 (Exp3, foul/hit_into_play F1 개선 확인)
 
 ### 다음 우선순위
-1. **[Critical]** 범용 전이 모델: 단일 투수 → 전체 MLB 2023 데이터로 model.py 재학습
-   - batter_clustering.py의 raw_df (~72만 건) 재활용
-   - epochs: 5 → 20, batch_size: 64 → 1024
-   - 목표 val_acc: 65%+
-2. **[High]** MLP epochs 증가: `wandb.config`의 `epochs` 값을 5 → 20 (main.py L98)
-3. **[High]** RE24 매트릭스 연도별 갱신 (현재 2019 하드코딩, pitch_env.py + mdp_solver.py 두 곳)
-4. **[Medium]** 인플레이 타구 확률 실데이터 기반 교체 (현재 70/15/10/5% 하드코딩)
-5. **[Medium]** DQN 강화: total_timesteps 300K→500K, exploration_fraction 0.30→0.40
-6. **[Low]** FastAPI 실시간 추천 API
+1. **[High]** RE24 매트릭스 연도별 갱신 (현재 2019 하드코딩, pitch_env.py + mdp_solver.py 두 곳)
+2. **[Medium]** 인플레이 타구 확률 실데이터 기반 교체 (현재 70/15/10/5% 하드코딩)
+3. **[Medium]** DQN 강화: total_timesteps 300K→500K, exploration_fraction 0.30→0.40
+4. **[Low]** FastAPI 실시간 추천 API
 
 ---
 
@@ -299,10 +302,10 @@ DQN 주요 구종    : Slider 59.6%, Fastball 18.7%
 
 ```
 main                      배포/완성본 브랜치
-feature/batter-clustering-v1  현재 작업 브랜치 (원격 동기화됨)
+feature/task5-6-overnight      현재 작업 브랜치 (원격 동기화됨)
 ```
 
-현재 브랜치 `feature/batter-clustering-v1`에서 작업 중. PR 전 main에 머지.
+현재 브랜치 `feature/task5-6-overnight`에서 작업 중. PR 전 main에 머지.
 
 ---
 
@@ -332,9 +335,9 @@ feature/batter-clustering-v1  현재 작업 브랜치 (원격 동기화됨)
    `main.py` 실행 전에 반드시 두 군집화 스크립트를 먼저 실행해야 함.
    (파일 없으면 cluster="0" fallback으로 실행되지만 정확도 저하)
 
-7. **MLP는 단일 투수 데이터로 학습됨**: 현재 `model.py`는 `main.py`에서 넘겨받은
-   단일 투수 투구 데이터만으로 학습. val_acc 47%는 데이터 부족이 주원인.
-   범용 모델 구현 전까지 이 한계는 유효.
+7. **범용 모델 사용 시 `model_config_universal.json` 필수**: `load_from_checkpoint()`가
+   이 파일에서 hidden_dims를 읽어 MLP를 생성함. 파일 없으면 [128,64] fallback이지만,
+   현재 best 모델은 [256,128,64]이므로 size mismatch 발생.
 
 8. **RE24 매트릭스 이중 정의**: `pitch_env.py`(PitchEnv.RE24_MATRIX)와
    `mdp_solver.py`(MDPOptimizer.re24_matrix) 두 곳에 동일한 값이 있음.
@@ -352,7 +355,7 @@ feature/batter-clustering-v1  현재 작업 브랜치 (원격 동기화됨)
 ```
 Entity  : pitcheezy
 Project : SmartPitch-Portfolio
-주요 런 : cuafju1e  (Clayton Kershaw 2024, 현재까지의 기준 실험)
+주요 런 : h4n3o0di  (Gerrit Cole 2019, 범용 모델 + DQN 파이프라인)
 ```
 
 로깅 항목: MLP 학습 곡선(epoch/train_loss/val_loss/val_accuracy), DQN 에피소드 보상/탐색률,
