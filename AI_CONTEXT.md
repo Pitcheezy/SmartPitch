@@ -90,16 +90,16 @@ DQN 주요 구종    : Fastball 51.3%, Slider 24.3%, Curveball 14.9%, Changeup 1
 분석 대상 시즌과 기대득점 기준이 다르면 보상 함수의 절대값이 틀어진다.
 두 파일을 **반드시 동시에** 수정해야 한다.
 
-### [우선순위 2] DQN 학습 강화
+### [우선순위 2] 인플레이 타구 확률 실데이터 기반 교체
+현재 아웃 70%, 1루타 15%, 2루타 10%, 홈런 5%로 임의 설정.
+pitch_env.py + mdp_solver.py 두 곳 동시 수정 필요.
+
+### [우선순위 3] DQN 학습 강화
 ```python
 # main.py wandb config 수정:
 "dqn_total_timesteps": 500_000      # 300K → 500K
 "dqn_exploration_fraction": 0.40    # 0.30 → 0.40
 ```
-
-### [우선순위 3] 인플레이 타구 확률 실데이터 기반 교체
-현재 아웃 70%, 1루타 15%, 2루타 10%, 홈런 5%로 임의 설정.
-pitch_env.py + mdp_solver.py 두 곳 동시 수정 필요.
 
 ### [우선순위 4 — 미래] 실시간 추천 API
 ```

@@ -34,46 +34,59 @@ MLB Statcast 투구 데이터를 기반으로 볼카운트·주자상황·타자
 ## 디렉토리 구조 및 파일 역할
 
 ```
-paper_review/
+SmartPitch/
 ├── src/
-│   ├── __init__.py              빈 파일 (src를 패키지로 인식시키기 위함)
-│   ├── main.py                  전체 파이프라인 오케스트레이터 (진입점)
-│   ├── data_loader.py           Statcast 투구 데이터 수집 + 전처리 클래스
-│   ├── clustering.py            단일 투수 구종 레퍼토리 식별 (UMAP+KMeans)
-│   ├── batter_clustering.py     2023 MLB 전체 타자 군집화 (독립 실행 스크립트)
-│   ├── pitcher_clustering.py    2023 MLB 전체 투수 군집화 (독립 실행 스크립트)
-│   ├── universal_model_trainer.py 2023 MLB 전체 데이터 범용 MLP 학습 (독립 실행 스크립트)
-│   ├── model.py                 투구 결과 전이 확률 예측 PyTorch MLP
-│   ├── mdp_solver.py            MDP 가치반복(Value Iteration) 최적 정책 계산
-│   ├── pitch_env.py             Gymnasium 커스텀 환경 (이닝 단위 시뮬레이션)
-│   └── rl_trainer.py            DQN 에이전트 학습/평가 클래스
+│   ├── __init__.py                  빈 파일 (src를 패키지로 인식시키기 위함)
+│   ├── main.py                      전체 파이프라인 오케스트레이터 (진입점)
+│   ├── data_loader.py               Statcast 투구 데이터 수집 + 전처리 클래스
+│   ├── clustering.py                단일 투수 구종 레퍼토리 식별 (UMAP+KMeans)
+│   ├── batter_clustering.py         2023 MLB 전체 타자 군집화 (독립 실행 스크립트)
+│   ├── pitcher_clustering.py        2023 MLB 전체 투수 군집화 (독립 실행 스크립트)
+│   ├── universal_model_trainer.py   범용 MLP 학습 (2023 MLB 전체, 독립 실행 스크립트)
+│   ├── model.py                     투구 결과 전이 확률 예측 PyTorch MLP
+│   ├── mdp_solver.py                MDP 가치반복(Value Iteration) 최적 정책 계산
+│   ├── pitch_env.py                 Gymnasium 커스텀 환경 (이닝 단위 시뮬레이션)
+│   └── rl_trainer.py                DQN 에이전트 학습/평가 클래스
 │
-├── data/                        git에서 추적 안 함 (*.csv는 .gitignore)
-│   ├── batter_clusters_2023.csv batter_clustering.py 실행 결과
-│   └── pitcher_clusters_2023.csv pitcher_clustering.py 실행 결과
+├── data/                            git에서 추적 안 함 (*.csv, *.json은 .gitignore)
+│   ├── batter_clusters_2023.csv         타자 군집 매핑 (batter_clustering.py가 생성)
+│   ├── pitcher_clusters_2023.csv        투수 군집 매핑 (pitcher_clustering.py가 생성)
+│   ├── feature_columns_universal.json   범용 모델 입력 피처 목록 (universal_model_trainer.py가 생성)
+│   ├── target_classes_universal.json    범용 모델 출력 클래스 목록 (universal_model_trainer.py가 생성)
+│   └── model_config_universal.json      범용 모델 아키텍처 설정 {"hidden_dims", "dropout_rate"}
 │
-├── fetch_wandb_run.py                   W&B 런 데이터 로컬 추출 유틸리티
-├── best_transition_model.pth            단일 투수 MLP 가중치 (gitignored *.pth)
+├── docs/
+│   └── work_log_20260329_30.md      작업 로그 (학습용)
+│
 ├── best_transition_model_universal.pth  범용 MLP 가중치 (gitignored *.pth)
-│                                        → uv run src/universal_model_trainer.py 로 생성
-│                                        → 또는 W&B Artifact "universal_transition_mlp" 에서 다운로드
-├── best_dqn_model/              EvalCallback 최고 DQN 체크포인트 (gitignored)
-├── smartpitch_dqn_final.zip     최종 DQN 모델 (gitignored *.zip)
+├── smartpitch_dqn_final.zip             최종 DQN 모델 (gitignored *.zip)
 │
 ├── pyproject.toml               의존성 정의
 ├── uv.lock                      버전 잠금 파일 (팀 동기화 기준)
 ├── .python-version              "3.12" 고정
-├── .gitignore                   *.pth, *.csv, *.zip, *.png, wandb/, best_dqn_model/ 등 제외
+├── .gitignore                   *.pth, *.csv, *.json(data/), *.zip, *.png, wandb/ 등 제외
 ├── README.md                    팀원용 문서 (파이프라인 개요, 빠른 시작)
 ├── AI_CONTEXT.md                AI 작업 컨텍스트 (완료 목록, 다음 우선순위)
+├── TODO.md                      작업 리스트 (완료/남은 작업)
 └── CLAUDE.md                    이 파일
 ```
 
-> **gitignored 주의**: `data/*.csv`, `*.pth`, `*.zip`, `wandb/`, `best_dqn_model/`는 git 추적 안 됨.
+> **gitignored 주의**: `data/` 전체, `*.pth`, `*.zip`, `wandb/`, `best_dqn_model/`는 git 추적 안 됨.
 > 팀원이 클론 후 아래 순서로 실행해야 함:
 > 1. `uv run src/batter_clustering.py` / `uv run src/pitcher_clustering.py`
 > 2. `uv run src/universal_model_trainer.py` (범용 모델 생성, 약 20~40분)
->    또는 W&B Artifact `universal_transition_mlp`에서 3개 파일 수동 다운로드
+>    또는 W&B Artifact에서 다운로드:
+>    ```bash
+>    # W&B Artifact에서 범용 모델 4개 파일 다운로드
+>    uv run python -c "
+>    import wandb
+>    api = wandb.Api()
+>    artifact = api.artifact('pitcheezy/SmartPitch-Portfolio/universal_transition_mlp:latest')
+>    artifact.download(root='.')
+>    "
+>    # → best_transition_model_universal.pth, data/feature_columns_universal.json,
+>    #   data/target_classes_universal.json, data/model_config_universal.json
+>    ```
 
 ---
 
@@ -103,6 +116,10 @@ paper_review/
 
 ### 메인 파이프라인 (main.py 실행 시 순서)
 
+> **두 가지 모드**: `main.py` 상단의 `USE_UNIVERSAL_MODEL` 플래그로 전환.
+> - `True` (권장): 범용 모델 로드 → Step 3을 건너뛰고 바로 Step 4로
+> - `False`: 단일 투수 데이터로 MLP 직접 학습 (레거시)
+
 ```
 [Step 1] PitchDataLoader.load_and_prepare_data()
   pybaseball.playerid_lookup() → MLBAM ID 취득
@@ -117,14 +134,25 @@ paper_review/
   df['mapped_pitch_name'] 컬럼 추가
        ↓  df_clustered, identified_pitch_names
 
-[Step 3] TransitionProbabilityModel.run_modeling_pipeline()
+[Step 3] USE_UNIVERSAL_MODEL=True 시:
+  TransitionProbabilityModel.load_from_checkpoint(
+      model_path="best_transition_model_universal.pth",
+      feature_columns_path="data/feature_columns_universal.json",
+      target_classes_path="data/target_classes_universal.json",
+      model_config_path="data/model_config_universal.json",
+  )
+  → model_config에서 hidden_dims=[256,128,64] 읽어 MLP 생성 후 가중치 로드
+  → eval() 모드의 추론 전용 인스턴스 반환
+
+[Step 3] USE_UNIVERSAL_MODEL=False 시 (레거시):
+  TransitionProbabilityModel.run_modeling_pipeline()
   _prepare_data():
     batter_clusters_2023.csv left join → batter_cluster 컬럼
     pitcher_clusters_2023.csv left join → pitcher_cluster 컬럼 (p_cluster로 리네임 후 merge)
-    count_state 생성: "{b}-{s}_{outs}_{runners}" 형식
-    pd.get_dummies(count_state + mapped_pitch_name + zone + batter_cluster + pitcher_cluster)
+    hit_by_pitch 제거 (4클래스)
+    수치 피처 6개 + pd.get_dummies(mapped_pitch_name + zone + batter_cluster + pitcher_cluster)
     LabelEncoder(description) → y
-  PyTorch MLP 학습 (Input→128→64→output_dim)
+  PyTorch MLP 학습 (Input→[128→64]→output_dim, EarlyStopping patience=5)
   best_transition_model.pth 저장
        ↓  feature_columns, target_classes
 
@@ -154,8 +182,9 @@ paper_review/
 예시: "3-2_2_111_7_0"
 파싱: parts = state.split('_')  → 5개 원소
       parts[0]="3-2", parts[1]="2", parts[2]="111", parts[3]="7", parts[4]="0"
-      # count_state_val은 model.py 입력에 직접 사용하지 않음 (B안 이후)
-      # balls/strikes/outs/runners를 수치 피처로 직접 전달
+      # count_state 문자열은 model.py 입력에 직접 사용하지 않음
+      # 초기에는 count_state를 one-hot(288차원)으로 인코딩했으나,
+      # 수치 피처 6개(balls/strikes/outs/on_1b/on_2b/on_3b)로 대체함 (커밋 b76baa9)
 ```
 
 > **주의**: 예전에 4-파트 형식(`count_outs_runners_batter`)이었다가 5-파트로 변경됨.
@@ -167,12 +196,14 @@ paper_review/
  batter_cluster(0-7), pitcher_cluster(0-3)]
 ```
 
-### 모델 입력 피처 구성 (model.py, B안 이후)
+### 모델 입력 피처 구성 (model.py)
 ```python
 # 수치 피처 (6개) + One-Hot 범주형 피처
+# 초기 설계에서는 count_state를 one-hot(288차원)으로 인코딩했으나,
+# 카운트 간 일반화를 위해 수치 피처 6개로 대체 (커밋 b76baa9)
 X_num = pd.DataFrame({'balls':..., 'strikes':..., 'outs':..., 'on_1b':..., 'on_2b':..., 'on_3b':...})
 X_cat_encoded = pd.get_dummies(df[['mapped_pitch_name','zone','batter_cluster','pitcher_cluster']])
-X_encoded = pd.concat([X_num, X_cat_encoded], axis=1)
+X_encoded = pd.concat([X_num, X_cat_encoded], axis=1).astype(float)  # pandas 3.0 호환
 # 총 ~40차원: 수치(6) + pitch_name(9) + zone(13) + batter(8) + pitcher(4)
 # feature_columns 리스트로 보관 → PitchEnv와 MDPOptimizer에서 동일 순서로 입력 구성
 ```

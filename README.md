@@ -40,7 +40,7 @@ W&B 대시보드 (학습곡선 / UMAP 시각화 / 정책테이블 / 구종분포
 ## 파일 구조
 
 ```
-paper_review/
+SmartPitch/
 ├── src/
 │   ├── main.py                      전체 파이프라인 실행 진입점
 │   ├── data_loader.py               Statcast 데이터 수집 + 전처리
@@ -52,16 +52,19 @@ paper_review/
 │   ├── mdp_solver.py                MDP 가치반복 최적 정책 계산
 │   ├── pitch_env.py                 Gymnasium RL 환경
 │   └── rl_trainer.py                DQN 에이전트 학습/평가
-├── data/
+├── data/                            (gitignored — 클론 후 생성 필요)
 │   ├── batter_clusters_2023.csv         타자 군집 매핑 (batter_id → cluster 0~7)
 │   ├── pitcher_clusters_2023.csv        투수 군집 매핑 (pitcher_id → cluster 0~3)
 │   ├── feature_columns_universal.json   범용 모델 입력 피처 목록
 │   ├── target_classes_universal.json    범용 모델 출력 클래스 목록 (4종)
 │   └── model_config_universal.json      범용 모델 아키텍처 설정 (hidden_dims, dropout_rate)
+├── docs/
+│   └── work_log_20260329_30.md      작업 로그 (학습용)
 ├── pyproject.toml               uv 의존성 정의
 ├── uv.lock                      정확한 버전 잠금 (팀 동기화 기준)
 ├── .python-version              Python 3.12 고정
 ├── AI_CONTEXT.md                AI 작업 컨텍스트 (다음 작업 가이드)
+├── TODO.md                      작업 리스트 (완료/남은 작업)
 └── README.md                    이 파일
 ```
 
@@ -97,9 +100,18 @@ uv run python -c "import torch; print('CUDA:', torch.cuda.is_available())"
 uv run src/batter_clustering.py   # → data/batter_clusters_2023.csv (타자 K=8)
 uv run src/pitcher_clustering.py  # → data/pitcher_clusters_2023.csv (투수 K=4)
 
-# [선행 작업 2] 범용 전이 모델 학습 — 최초 1회만 실행 (약 20~40분)
-# 또는 W&B Artifact "universal_transition_mlp"에서 다운로드
+# [선행 작업 2] 범용 전이 모델 — 아래 두 방법 중 하나 선택
+
+# 방법 A: 직접 학습 (약 20~40분)
 uv run src/universal_model_trainer.py
+
+# 방법 B: W&B Artifact에서 다운로드 (1분)
+uv run python -c "
+import wandb; api = wandb.Api()
+artifact = api.artifact('pitcheezy/SmartPitch-Portfolio/universal_transition_mlp:latest')
+artifact.download(root='.')
+"
+# 두 방법 모두 아래 4개 파일을 생성:
 # → best_transition_model_universal.pth
 # → data/feature_columns_universal.json
 # → data/target_classes_universal.json
@@ -197,5 +209,6 @@ MDP 상태 키 형식 (문자열):
 ## 다음 마일스톤
 
 1. **RE24 갱신**: pitch_env.py + mdp_solver.py의 2019 고정값을 분석 시즌 기준으로 교체
-2. **DQN 강화**: total_timesteps 300K → 500K, exploration_fraction 0.30 → 0.40
-3. **실시간 추천 API**: 타석 상황 입력 → 구종·코스 추천 JSON 반환
+2. **인플레이 타구 확률**: 현재 하드코딩(70/15/10/5%) → 실제 MLB 데이터 기반 교체
+3. **DQN 강화**: total_timesteps 300K → 500K, exploration_fraction 0.30 → 0.40
+4. **실시간 추천 API**: 타석 상황 입력 → 구종·코스 추천 JSON 반환
