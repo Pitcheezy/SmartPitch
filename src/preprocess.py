@@ -11,7 +11,7 @@ import numpy as np
 
 # Statcast 원본에서 사용할 컬럼 (나머지는 제거)
 SELECTED_COLS = [
-    'pitch_type', 'game_date', 'release_speed', 'release_pos_x', 'release_pos_z',
+    'game_pk', 'pitch_type', 'game_date', 'release_speed', 'release_pos_x', 'release_pos_z',
     'batter', 'pitcher', 'events', 'description', 'zone', 'stand', 'p_throws',
     'bb_type', 'balls', 'strikes', 'pfx_x', 'pfx_z', 'plate_x', 'plate_z',
     'on_3b', 'on_2b', 'on_1b', 'outs_when_up', 'inning', 'inning_topbot',
