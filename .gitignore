@@ -17,17 +17,19 @@ venv/
 *.zip
 best_dqn_model/
 
-# 데이터 (raw/processed - 용량 큼)
+# 데이터 (raw/processed/CSV/JSON - 용량 큼, 스크립트로 재생성)
 data/raw/
 data/processed/
 *.parquet
+*.csv
+*.png
 
 # 로깅 및 실험
 wandb/
+*.log
 
 # Jupyter
 .ipynb_checkpoints/
-*.ipynb_checkpoints
 
 # IDE / OS
 .idea/
@@ -38,6 +40,7 @@ Thumbs.db
 # pybaseball 캐시
 .pybaseball/
 
-# 기타 생성 파일
-*.log
-*.csv
+# 테스트/임시 파일
+test.ipynb
+wandb_test.py
+data_download.py

@@ -1,3 +1,45 @@
+"""
+rl_trainer.py — DQN 강화학습 에이전트 학습 및 평가
+
+역할:
+    pitch_env.py의 PitchEnv 위에서 Stable-Baselines3 DQN 에이전트를 학습하고 평가합니다.
+    MDP Solver와의 차이: MDP는 모델 기반(Model-Based)이지만, DQN은 환경과 직접 상호작용하며
+    Q-함수를 학습하는 모델 프리(Model-Free) 방식입니다.
+
+DQN 선택 이유:
+    - 이산 행동 공간 (구종 × 존 = 수십 개의 선택지) → DQN이 적합
+    - 관측 벡터 8D로 단순한 상태 표현 → MLP Policy로 충분
+    - Off-Policy(Replay Buffer) → 데이터 효율성 높음
+
+핵심 컴포넌트:
+    WandbDQNCallback : 에피소드마다 보상/길이를 W&B에 실시간 로깅
+    DQNTrainer.build(): DQN 모델 초기화 (메서드 체이닝 지원)
+    DQNTrainer.train(): EvalCallback + W&B 콜백으로 학습 실행
+    DQNTrainer.evaluate(): 결정론적 정책으로 100이닝 평가
+    DQNTrainer.print_policy_sample(): 주요 볼카운트별 추천 구종 출력
+
+학습 설정 (main.py에서 wandb.config로 주입):
+    total_timesteps    : 300,000  (목표: 500,000)
+    buffer_size        : 100,000  (Replay Buffer)
+    learning_rate      : 1e-4
+    exploration_fraction: 0.30   (전체 스텝의 30%는 ε-greedy 탐색)
+    exploration_final_eps: 0.05  (탐색 이후 최소 탐색률 5%)
+    gamma              : 0.99    (미래 보상 할인율)
+    net_arch           : [128, 64] (MLP Policy 은닉층, model.py와 동일)
+
+관측 공간 (8D):
+    [balls(0-3), strikes(0-2), outs(0-2), on_1b(0/1), on_2b(0/1), on_3b(0/1),
+     batter_cluster(0-7), pitcher_cluster(0-K-1)]
+
+보상 함수 (PitchEnv에서 정의):
+    아웃 발생: +RE24 (현 상황 기대실점 감소분)
+    안타/볼넷: -RE24 (현 상황 기대실점 증가분)
+    이닝 종료(3아웃): 에피소드 종료
+
+저장 파일:
+    best_dqn_model/best_model.zip   — EvalCallback 기준 최고 성능
+    smartpitch_dqn_final.zip        — 학습 완료 후 최종 모델
+"""
 import numpy as np
 import wandb
 from typing import Optional
@@ -245,7 +287,8 @@ class DQNTrainer:
 
         for balls in range(4):
             for strikes in range(3):
-                obs = np.array([balls, strikes, 0, 0, 0, 0], dtype=np.float32)
+                # 8차원(balls, strikes, outs, 1b, 2b, 3b, batter_cluster, pitcher_cluster) 더미 배열
+                obs = np.array([balls, strikes, 0, 0, 0, 0, 0, 0], dtype=np.float32)
                 action, _ = self.model.predict(obs, deterministic=True)
                 label = env.action_to_label(int(action))
                 pitch, zone = label.split(" / ")

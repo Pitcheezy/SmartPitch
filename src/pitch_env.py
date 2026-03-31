@@ -1,3 +1,31 @@
+"""
+pitch_env.py — DQN 강화학습을 위한 Gymnasium 커스텀 환경
+
+역할:
+    MLP 전이 모델을 시뮬레이터로 사용해 투구 1구씩 진행하는 이닝 환경.
+    DQN 에이전트가 이 환경에서 탐색·학습하여 최적 투구 정책을 학습합니다.
+
+관측 공간 (8D):
+    [balls(0-3), strikes(0-2), outs(0-2), on_1b(0/1), on_2b(0/1), on_3b(0/1),
+     batter_cluster(0-7), pitcher_cluster(0-K-1)]
+
+행동 공간:
+    Discrete(n_pitches × n_zones)
+    예: 4구종 × 14코스 = 56
+    디코딩: pitch_idx = action // n_zones,  zone_idx = action % n_zones
+
+보상 함수:
+    RE24(이전 상황) - RE24(이후 상황) - 실점
+    ※ RE24는 아웃수+주자 상태만으로 결정 (count는 영향 없음)
+
+에피소드:
+    3아웃 = 이닝 종료 = terminated=True
+    초기 상태: 0-0카운트, 랜덤 아웃수, 랜덤 주자 (다양한 상황 학습을 위해)
+
+pitcher_cluster 파라미터:
+    int  → 단일 투수 모드: 항상 동일한 투수 유형 사용 (main.py 실행 시)
+    None → 범용 모드: 에피소드마다 랜덤 투수 유형 샘플링 (미래 범용 학습용)
+"""
 import gymnasium as gym
 import numpy as np
 import pandas as pd
@@ -33,27 +61,62 @@ class PitchEnv(gym.Env):
         "011": ("111", 0), "111": ("111", 1),
     }
 
-    def __init__(self, transition_model, pitch_names: List[str], zones: List[float]):
+    def __init__(self, transition_model, pitch_names: List[str], zones: List[float],
+                 pitcher_cluster: Optional[int] = None):
         """
-        :param transition_model : 학습된 TransitionProbabilityModel 인스턴스
-        :param pitch_names      : 클러스터링으로 식별된 구종 이름 리스트
-        :param zones            : 투구 존 번호 리스트
+        :param transition_model  : 학습된 TransitionProbabilityModel 인스턴스
+        :param pitch_names       : 클러스터링으로 식별된 구종 이름 리스트
+        :param zones             : 투구 존 번호 리스트
+        :param pitcher_cluster   : 고정 투수 군집 ID (int) — None이면 에피소드마다 무작위 선택
         """
         super().__init__()
+        import os
 
         self.transition_model = transition_model
         self.pitch_names = pitch_names
         self.zones = [float(z) for z in zones]
         self.n_pitches = len(pitch_names)
         self.n_zones = len(self.zones)
+        
+        # ── 타자 군집(Cluster) 매핑 데이터 로드 ─────────────────────────────
+        self.batter_clusters = {}
+        batter_csv = os.path.join(os.path.dirname(__file__), "..", "data", "batter_clusters_2023.csv")
+        try:
+            if os.path.exists(batter_csv):
+                df_b = pd.read_csv(batter_csv)
+                self.batter_clusters = dict(zip(df_b['batter_id'], df_b['cluster']))
+                print(f"[PitchEnv] 타자 군집 데이터 매핑 완료: {len(self.batter_clusters)}명")
+            else:
+                print(f"[PitchEnv] Warning: '{batter_csv}' 없음. 모든 타자를 기본 군집(0)으로 간주합니다.")
+        except Exception as e:
+            print(f"[PitchEnv] Error reading batter cluster csv: {e}. Defaulting to cluster 0.")
+
+        # ── 투수 군집(Cluster) 매핑 데이터 로드 ─────────────────────────────
+        # fixed_pitcher_cluster가 지정되면 항상 그 값 사용 (단일 투수 모드)
+        # None이면 에피소드마다 랜덤 선택 (범용 모드)
+        self.fixed_pitcher_cluster = pitcher_cluster
+        self.n_pitcher_clusters = 1  # 기본값; CSV가 있으면 실제 K 값으로 업데이트
+        pitcher_csv = os.path.join(os.path.dirname(__file__), "..", "data", "pitcher_clusters_2023.csv")
+        try:
+            if os.path.exists(pitcher_csv):
+                df_p = pd.read_csv(pitcher_csv)
+                self.n_pitcher_clusters = int(df_p['cluster'].max()) + 1
+                print(f"[PitchEnv] 투수 군집 데이터 로드 완료: K={self.n_pitcher_clusters}")
+            else:
+                print(f"[PitchEnv] Warning: '{pitcher_csv}' 없음. 투수 군집 K=1로 기본 처리.")
+        except Exception as e:
+            print(f"[PitchEnv] Error reading pitcher cluster csv: {e}. K=1 fallback.")
 
         # ── 행동 공간: 구종 × 존 (이산) ─────────────────────────────────────
         self.action_space = gym.spaces.Discrete(self.n_pitches * self.n_zones)
 
-        # ── 관측 공간: [balls, strikes, outs, 1b, 2b, 3b] ────────────────────
+        # ── 관측 공간: [balls, strikes, outs, 1b, 2b, 3b, batter_cluster, pitcher_cluster] ──
+        # batter_cluster : 0 ~ 7  (K=8 고정)
+        # pitcher_cluster: 0 ~ (n_pitcher_clusters - 1)  (K=4~8, 실루엣 탐색 결과)
+        max_pc = max(self.n_pitcher_clusters - 1, 0)
         self.observation_space = gym.spaces.Box(
-            low=np.array([0, 0, 0, 0, 0, 0], dtype=np.float32),
-            high=np.array([3, 2, 2, 1, 1, 1], dtype=np.float32),
+            low=np.array( [0, 0, 0, 0, 0, 0, 0, 0],       dtype=np.float32),
+            high=np.array([3, 2, 2, 1, 1, 1, 7, max_pc],   dtype=np.float32),
             dtype=np.float32,
         )
 
@@ -62,6 +125,9 @@ class PitchEnv(gym.Env):
         self.strikes = 0
         self.outs = 0
         self.runners = [0, 0, 0]  # [1루, 2루, 3루]
+        self.current_batter_id = None
+        self.current_batter_cluster = 0
+        self.current_pitcher_cluster = self.fixed_pitcher_cluster if self.fixed_pitcher_cluster is not None else 0
 
     # ─────────────────────────────────────────────────────────────────────────
     # Gym 인터페이스
@@ -71,12 +137,30 @@ class PitchEnv(gym.Env):
         """
         새 이닝 시작.
         다양한 상황을 균등하게 경험시키기 위해 아웃카운트와 주자 상태를 무작위로 초기화합니다.
+        무작위 타자를 선택하여 현재 이닝의 타자 군집 정보를 세팅합니다.
         """
         super().reset(seed=seed)
         self.balls = 0
         self.strikes = 0
         self.outs = int(self.np_random.integers(0, 3))           # 0, 1, 2 중 하나
         self.runners = list(self.np_random.integers(0, 2, size=3).tolist())  # 각 루 0 or 1
+        
+        # 무작위 타석 시뮬레이션을 위함
+        # 매핑표가 있으면 실제 타자를 픽하고, 아니면 0~7 사이 랜덤값을 부여
+        if self.batter_clusters:
+            batter_ids = list(self.batter_clusters.keys())
+            self.current_batter_id = self.np_random.choice(batter_ids)
+            self.current_batter_cluster = self.batter_clusters.get(self.current_batter_id, 0)
+        else:
+            self.current_batter_id = -1
+            self.current_batter_cluster = int(self.np_random.integers(0, 8))
+
+        # 투수 군집: 고정값(단일 투수 모드)이면 그 값 유지, None이면 에피소드마다 무작위 선택
+        if self.fixed_pitcher_cluster is not None:
+            self.current_pitcher_cluster = self.fixed_pitcher_cluster
+        else:
+            self.current_pitcher_cluster = int(self.np_random.integers(0, self.n_pitcher_clusters))
+
         return self._get_obs(), {}
 
     def step(self, action: int):
@@ -127,8 +211,12 @@ class PitchEnv(gym.Env):
 
     def _get_obs(self) -> np.ndarray:
         return np.array(
-            [self.balls, self.strikes, self.outs,
-             self.runners[0], self.runners[1], self.runners[2]],
+            [
+                self.balls, self.strikes, self.outs,
+                self.runners[0], self.runners[1], self.runners[2],
+                self.current_batter_cluster,
+                self.current_pitcher_cluster,
+            ],
             dtype=np.float32,
         )
 
@@ -147,20 +235,30 @@ class PitchEnv(gym.Env):
         TransitionProbabilityModel에 현재 상태 + 행동을 입력해 투구 결과를 확률적으로 샘플링.
         모델 학습 시 사용한 One-Hot Encoding 형식과 동일하게 구성합니다.
         """
-        runners_str = self._runners_str()
-        count_state = f"{self.balls}-{self.strikes}_{self.outs}_{runners_str}"
-
         # 모델 입력 DataFrame (Zero-initialized)
         input_df = pd.DataFrame(
             np.zeros((1, len(self.transition_model.feature_columns))),
             columns=self.transition_model.feature_columns,
         )
 
-        # 해당 상태/구종/존 컬럼을 1로 설정
+        # 수치 피처: 볼카운트/아웃/주자 직접 할당 (B안: count_state one-hot 대체)
+        for col, val in [
+            ('balls',   self.balls),
+            ('strikes', self.strikes),
+            ('outs',    self.outs),
+            ('on_1b',   self.runners[0]),
+            ('on_2b',   self.runners[1]),
+            ('on_3b',   self.runners[2]),
+        ]:
+            if col in input_df.columns:
+                input_df[col] = float(val)
+
+        # 카테고리 피처: 구종/존/타자군집/투수군집 one-hot
         for col_key, col_val in [
-            ("count_state", count_state),
             ("mapped_pitch_name", pitch),
             ("zone", zone),
+            ("batter_cluster", str(int(self.current_batter_cluster))),
+            ("pitcher_cluster", str(int(self.current_pitcher_cluster))),
         ]:
             col_name = f"{col_key}_{col_val}"
             if col_name in input_df.columns:
@@ -181,27 +279,31 @@ class PitchEnv(gym.Env):
         """
         runs = 0.0
 
-        # ── 스트라이크 계열 ──────────────────────────────────────────────────
-        if outcome in {"called_strike", "swinging_strike", "foul_tip",
-                       "swinging_strike_blocked", "missed_bunt"}:
+        # ── 스트라이크 (strike 그룹) ─────────────────────────────────────────
+        # called_strike / swinging_strike / foul_tip / swinging_strike_blocked
+        # / missed_bunt / bunt_foul_tip 이 모두 "strike"로 병합됨
+        if outcome == "strike":
             self.strikes += 1
             if self.strikes >= 3:          # 삼진
                 self.outs += 1
                 self.balls, self.strikes = 0, 0
 
-        # ── 파울 ─────────────────────────────────────────────────────────────
-        elif outcome in {"foul", "foul_bunt"}:
+        # ── 파울 (foul 그룹) ─────────────────────────────────────────────────
+        # foul / foul_bunt 가 "foul"로 병합됨
+        elif outcome == "foul":
             if self.strikes < 2:           # 2스트라이크 이후 파울은 카운트 불변
                 self.strikes += 1
 
-        # ── 볼 계열 ──────────────────────────────────────────────────────────
-        elif outcome in {"ball", "blocked_dirt", "pitchout"}:
+        # ── 볼 (ball 그룹) ───────────────────────────────────────────────────
+        # ball / blocked_ball 이 "ball"로 병합됨
+        elif outcome == "ball":
             self.balls += 1
             if self.balls >= 4:            # 볼넷
                 runs = self._apply_walk()
                 self.balls, self.strikes = 0, 0
 
         # ── 사구(HBP) ─────────────────────────────────────────────────────────
+        # 범용 모델(4클래스)에서는 HBP가 발생하지 않음. 단일 투수 모드 전용.
         elif outcome == "hit_by_pitch":
             runs = self._apply_walk()
             self.balls, self.strikes = 0, 0
