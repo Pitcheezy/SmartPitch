@@ -121,6 +121,7 @@ EXPERIMENTS = [
         "use_lr_scheduler":        False,
         "use_class_weights":       False,
         "use_feature_engineering": False,
+        "use_physical_features":   False,
     },
     {
         "run_name":                "Universal_MLP_Exp2_LRScheduler",
@@ -129,6 +130,7 @@ EXPERIMENTS = [
         "use_lr_scheduler":        True,
         "use_class_weights":       False,
         "use_feature_engineering": False,
+        "use_physical_features":   False,
     },
     {
         "run_name":                "Universal_MLP_Exp3_ClassWeights",
@@ -137,8 +139,36 @@ EXPERIMENTS = [
         "use_lr_scheduler":        False,
         "use_class_weights":       True,
         "use_feature_engineering": False,
+        "use_physical_features":   False,
+    },
+    {
+        # Task 12 — 투구 물리 피처 추가 (release_speed / pfx_x / pfx_z)
+        # Baseline(Exp1 [256,128,64] val_acc 58.1%)과 동일 아키텍처에 피처만 추가해
+        # 구속/무브먼트 입력의 순수 기여도를 측정한다.
+        "run_name":                "Universal_MLP_Exp4_PhysicalFeatures",
+        "description":             "물리 피처 추가: release_speed/pfx_x/pfx_z (정규화 수식 하드코딩)",
+        "hidden_dims":             [256, 128, 64],
+        "use_lr_scheduler":        False,
+        "use_class_weights":       False,
+        "use_feature_engineering": False,
+        "use_physical_features":   True,
+    },
+    {
+        # Task 12 — Exp3(class_weights) + Exp4(physical_features) 결합
+        # foul/hit_into_play의 낮은 recall과 물리 피처 기여를 합쳐서 측정.
+        "run_name":                "Universal_MLP_Exp5_CW_Physical",
+        "description":             "클래스 가중 + 물리 피처 결합",
+        "hidden_dims":             [256, 128, 64],
+        "use_lr_scheduler":        False,
+        "use_class_weights":       True,
+        "use_feature_engineering": False,
+        "use_physical_features":   True,
     },
 ]
+
+# Exp1-5 전체 실험 실행 (기본)
+# 특정 실험만 재현하려면 아래 줄 주석 해제:
+# EXPERIMENTS = [EXPERIMENTS[-1]]  # 마지막 실험만
 
 
 def _preprocess_raw(df: pd.DataFrame) -> pd.DataFrame:
@@ -183,8 +213,14 @@ def _preprocess_raw(df: pd.DataFrame) -> pd.DataFrame:
         'on_1b', 'on_2b', 'on_3b',
         'mapped_pitch_name', 'zone', 'description',
         'batter', 'pitcher',
+        # 물리 피처(Task 12): 구속·수평 무브먼트·수직 무브먼트
+        # NaN 56~57건(≈0.01%)으로 극소 → dropna 영향 무시 가능
+        'release_speed', 'pfx_x', 'pfx_z',
     ]
-    df = df[required].dropna(subset=['balls', 'strikes', 'outs_when_up', 'zone', 'description'])
+    df = df[required].dropna(subset=[
+        'balls', 'strikes', 'outs_when_up', 'zone', 'description',
+        'release_speed', 'pfx_x', 'pfx_z',
+    ])
     print(f"  필수 컬럼 필터링 후: {len(df):,}건")
 
     # zone float → int 변환 (1~14 정수)
@@ -228,6 +264,38 @@ def _add_engineered_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _add_physical_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    [Exp4용] 투구 물리 피처 3개를 수치 피처로 정규화해 추가합니다 (Task 12).
+
+    추가 피처 (원본 스케일 → 정규화 수식):
+      release_speed_n = (release_speed - 90) / 5
+          구속(mph): 일반 분포 80~100mph → 대략 [-2, 2] 범위
+          기준 90mph, 1 단위 = 5mph 편차
+      pfx_x_n         = pfx_x
+          수평 무브먼트(ft, 포수 시점): 일반 ±1.5ft → 원본 유지
+      pfx_z_n         = pfx_z
+          수직 무브먼트(ft): 일반 -0.5~1.8ft → 원본 유지
+
+    정규화 수식을 하드코딩하는 이유:
+      - StandardScaler를 쓰면 scaler 객체를 persist해야 하고, PitchEnv/MDPOptimizer
+        추론 시 동일 스케일러 로드가 필요해 파이프라인 복잡도가 증가한다.
+      - 현재 Exp3의 파생 피처(is_two_strike 등)도 동일하게 수식 기반 수치 피처이므로
+        일관성을 유지한다.
+
+    왜 필요한가 (Task 12):
+      현재 MLP는 "어떤 구종을 어느 존에"만 입력받는다. 같은 Fastball 라벨 안에서도
+      95mph와 88mph는 결과 분포가 다르고, 같은 pfx_x라도 투수마다 결과가 다르다.
+      물리 피처를 직접 넣으면 라벨 내 분산을 모델에 알려 val_acc 천장(58.1%)을 뚫을 수 있다.
+    """
+    df = df.copy()
+    df['release_speed_n'] = (df['release_speed'].astype(float) - 90.0) / 5.0
+    df['pfx_x_n']         = df['pfx_x'].astype(float)
+    df['pfx_z_n']         = df['pfx_z'].astype(float)
+    print(f"  물리 피처 추가: release_speed_n, pfx_x_n, pfx_z_n (정규화 완료)")
+    return df
+
+
 def _run_single_experiment(exp: dict, df_base: pd.DataFrame) -> dict:
     """
     단일 실험을 실행하고 결과를 반환합니다.
@@ -255,6 +323,7 @@ def _run_single_experiment(exp: dict, df_base: pd.DataFrame) -> dict:
             "use_lr_scheduler":        exp["use_lr_scheduler"],
             "use_class_weights":       exp["use_class_weights"],
             "use_feature_engineering": exp["use_feature_engineering"],
+            "use_physical_features":   exp.get("use_physical_features", False),
             "description":             exp["description"],
         }
     )
@@ -263,6 +332,8 @@ def _run_single_experiment(exp: dict, df_base: pd.DataFrame) -> dict:
         df = df_base.copy()
         if exp["use_feature_engineering"]:
             df = _add_engineered_features(df)
+        if exp.get("use_physical_features", False):
+            df = _add_physical_features(df)
 
         model = TransitionProbabilityModel(df=df, batch_size=BATCH_SIZE, lr=LR)
         model.run_modeling_pipeline(

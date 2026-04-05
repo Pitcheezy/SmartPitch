@@ -240,6 +240,15 @@ class TransitionProbabilityModel:
             if _feat in self.df.columns:
                 X_num[_feat] = self.df[_feat].astype(float)
 
+        # 투구 물리 피처(Task 12): 정규화된 컬럼이 df에 있을 때만 추가 (Exp4용)
+        # universal_model_trainer._add_physical_features()가 세 컬럼을 생성한다.
+        # 정규화 수식은 trainer 쪽에 하드코딩되어 있으며, 추론 시(PitchEnv/MDPOptimizer)에도
+        # (pitcher_cluster, mapped_pitch_name)별 lookup 테이블을 통해 동일 스케일로 구성해야 한다.
+        _physical_feats = ['release_speed_n', 'pfx_x_n', 'pfx_z_n']
+        for _feat in _physical_feats:
+            if _feat in self.df.columns:
+                X_num[_feat] = self.df[_feat].astype(float)
+
         # ── [One-Hot Encoding: 구종/존/타자군집/투수군집] ────────────────────────
         # 최종 입력 차원: 수치(6) + pitch_name(9) + zone(13) + batter(8) + pitcher(4) ≈ 40차원
         X_cat = self.df[['mapped_pitch_name', 'zone', 'batter_cluster', 'pitcher_cluster']]

@@ -169,9 +169,14 @@ MDP 상태 키 형식 (문자열):
 
 | 지표 | 값 | 비고 |
 |------|-----|------|
-| MLP val_accuracy | 58.1% | 범용 모델 Exp1 [256,128,64], 4클래스, 2023 MLB 72만 건 |
+| MLP val_accuracy | 58.3% | **Exp4** 물리 피처(+구속/무브) 추가, [256,128,64], 4클래스 |
+| MLP Top-2 / Top-3 | 80.8% / 95.1% | Exp4, 확률 분포 품질 지표 |
+| MLP macro F1 | 0.495 | **Exp5** (class_weights + physical), 소수 클래스 recall 개선 |
+| 현재 canonical 모델 | **Exp5** | MDP 확률 분포 품질 우선 → 저장된 universal 모델 |
 | DQN 평균 보상 | 0.436 | Gerrit Cole 2019, 100이닝 평가 |
 | DQN 주요 구종 | Fastball 51.3%, Slider 24.3% | Cole 2019 시즌 실제 구종 비율과 유사 |
+
+자세한 실험 비교는 [`docs/experiment_comparison.md`](docs/experiment_comparison.md) 참조.
 
 ---
 
@@ -180,7 +185,10 @@ MDP 상태 키 형식 (문자열):
 ```
 우선순위  항목
 ─────────────────────────────────────────────────────────────
-[High]     RE24 매트릭스 연도별 갱신 (현재 2019 고정)
+[High]     물리 피처 Phase 2: PitchEnv/MDPOptimizer lookup 테이블 추가
+           → (pitcher_cluster × mapped_pitch_name) 평균 release_speed/pfx 주입 필요
+[High]     범용 모델 구종 군집화 통합 (학습-추론 구종 분류 일치)
+[Medium]   RE24 매트릭스 연도별 갱신 (현재 2019 고정)
            → pitch_env.py와 mdp_solver.py 두 곳 동시 수정 필요
 [Medium]   batted ball 확률 단순화 (70/15/10/5%) → 실제 데이터 기반
 [Medium]   DQN timesteps 300K → 500K+, exploration 0.3 → 0.4
