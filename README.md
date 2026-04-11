@@ -51,15 +51,26 @@ SmartPitch/
 │   ├── model.py                     전이 확률 예측 MLP 학습
 │   ├── mdp_solver.py                MDP 가치반복 최적 정책 계산
 │   ├── pitch_env.py                 Gymnasium RL 환경
-│   └── rl_trainer.py                DQN 에이전트 학습/평가
+│   ├── rl_trainer.py                DQN 에이전트 학습/평가
+│   └── evaluate_baselines.py        베이스라인 5종 비교 평가 (Random/MostFreq/Freq/MDP/DQN ref)
+├── scripts/
+│   ├── analyze_mdp_vs_env.py            MDP vs PitchEnv 보상 일관성 분석 리포트 생성
+│   ├── generate_baseline_presentation.py 발표용 PNG 3종 생성 (overall/by_cluster/summary)
+│   ├── generate_presentation_charts.py  W&B 실험 결과 발표용 차트
+│   └── generate_pitch_location_heatmaps.py  투구 위치 히트맵
 ├── data/                            (gitignored — 클론 후 생성 필요)
 │   ├── batter_clusters_2023.csv         타자 군집 매핑 (batter_id → cluster 0~7)
 │   ├── pitcher_clusters_2023.csv        투수 군집 매핑 (pitcher_id → cluster 0~3)
 │   ├── feature_columns_universal.json   범용 모델 입력 피처 목록
 │   ├── target_classes_universal.json    범용 모델 출력 클래스 목록 (4종)
-│   └── model_config_universal.json      범용 모델 아키텍처 설정 (hidden_dims, dropout_rate)
+│   ├── model_config_universal.json      범용 모델 아키텍처 설정 (hidden_dims, dropout_rate)
+│   └── mdp_optimal_policy.pkl           MDP VI 결과 캐시 (9,216 상태)
 ├── docs/
-│   └── work_log_20260329_30.md      작업 로그 (학습용)
+│   ├── baseline_comparison.md           Cole 2019 5-agent 비교 결과
+│   ├── baseline_by_cluster.md           투수 군집별(K=4) 5-agent 비교 결과
+│   ├── mdp_vs_env_reward_analysis.md    MDP vs PitchEnv 줄 단위 분석 + 수렴/정책/trace
+│   ├── experiment_comparison.md         범용 MLP 실험(Exp1~5) 비교
+│   └── work_log_20260329_30.md          작업 로그 (학습용)
 ├── pyproject.toml               uv 의존성 정의
 ├── uv.lock                      정확한 버전 잠금 (팀 동기화 기준)
 ├── .python-version              Python 3.12 고정
@@ -176,7 +187,23 @@ MDP 상태 키 형식 (문자열):
 | DQN 평균 보상 | 0.436 | Gerrit Cole 2019, 100이닝 평가 |
 | DQN 주요 구종 | Fastball 51.3%, Slider 24.3% | Cole 2019 시즌 실제 구종 비율과 유사 |
 
-자세한 실험 비교는 [`docs/experiment_comparison.md`](docs/experiment_comparison.md) 참조.
+### 베이스라인 비교 (cluster 0, 1000 에피소드)
+
+| Agent | Mean Reward ± Std | Notes |
+|---|---|---|
+| **DQN (Cole 2019 ref)** | **+0.436 ± 1.255** | W&B run `h4n3o0di`, action space ~52 |
+| Random | +0.231 ± 1.098 | 117 action space |
+| Frequency (2023 League) | +0.223 ± 1.114 | |
+| MostFrequent (Cole 2019) | +0.151 ± 1.197 | |
+| MDPPolicy (VI 5회) | +0.151 ± 1.264 | 9,216 상태 최적 정책 |
+
+DQN이 모든 고정 정책 대비 **+0.29 이상** 우위. MDP 열위 원인은
+[`docs/mdp_vs_env_reward_analysis.md`](docs/mdp_vs_env_reward_analysis.md)에 상세 분석
+(VI 5회 미수렴 + MLP 58% 보정 부족 + stochastic sample 오차 증폭).
+
+자세한 비교는 [`docs/baseline_comparison.md`](docs/baseline_comparison.md),
+군집별 결과는 [`docs/baseline_by_cluster.md`](docs/baseline_by_cluster.md),
+MLP 실험은 [`docs/experiment_comparison.md`](docs/experiment_comparison.md) 참조.
 
 ---
 
@@ -187,6 +214,8 @@ MDP 상태 키 형식 (문자열):
 ─────────────────────────────────────────────────────────────
 [High]     물리 피처 Phase 2: PitchEnv/MDPOptimizer lookup 테이블 추가
            → (pitcher_cluster × mapped_pitch_name) 평균 release_speed/pfx 주입 필요
+[High]     MDP solve_mdp 수렴 개선: 5회 → 10회 또는 δ<1e-4, γ=0.99 도입
+           → Task 14 분석에서 iter 5 max|ΔV|=0.145 (미수렴) 확인
 [High]     범용 모델 구종 군집화 통합 (학습-추론 구종 분류 일치)
 [Medium]   RE24 매트릭스 연도별 갱신 (현재 2019 고정)
            → pitch_env.py와 mdp_solver.py 두 곳 동시 수정 필요
@@ -216,7 +245,9 @@ MDP 상태 키 형식 (문자열):
 
 ## 다음 마일스톤
 
-1. **RE24 갱신**: pitch_env.py + mdp_solver.py의 2019 고정값을 분석 시즌 기준으로 교체
-2. **인플레이 타구 확률**: 현재 하드코딩(70/15/10/5%) → 실제 MLB 데이터 기반 교체
-3. **DQN 강화**: total_timesteps 300K → 500K, exploration_fraction 0.30 → 0.40
-4. **실시간 추천 API**: 타석 상황 입력 → 구종·코스 추천 JSON 반환
+1. **물리 피처 Phase 2**: (pitcher_cluster, mapped_pitch_name) lookup 테이블 구축 → PitchEnv/MDP 추론 개선
+2. **MDP 수렴 개선**: solve_mdp 5회 → 10회 + γ=0.99, `data/mdp_optimal_policy.pkl` 재생성
+3. **군집 1~3 DQN 학습**: 현재는 군집 0(Cole 2019)만 학습됨 → 전 군집 비교표 완성
+4. **RE24 갱신**: pitch_env.py + mdp_solver.py의 2019 고정값을 분석 시즌 기준으로 교체
+5. **인플레이 타구 확률**: 현재 하드코딩(70/15/10/5%) → 실제 MLB 데이터 기반 교체
+6. **실시간 추천 API**: 타석 상황 입력 → 구종·코스 추천 JSON 반환

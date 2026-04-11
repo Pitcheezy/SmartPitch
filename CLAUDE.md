@@ -46,17 +46,30 @@ SmartPitch/
 │   ├── model.py                     투구 결과 전이 확률 예측 PyTorch MLP
 │   ├── mdp_solver.py                MDP 가치반복(Value Iteration) 최적 정책 계산
 │   ├── pitch_env.py                 Gymnasium 커스텀 환경 (이닝 단위 시뮬레이션)
-│   └── rl_trainer.py                DQN 에이전트 학습/평가 클래스
+│   ├── rl_trainer.py                DQN 에이전트 학습/평가 클래스
+│   └── evaluate_baselines.py        베이스라인 5종(Random/MostFrequent/Frequency/MDP/DQN ref) 평가
 │
-├── data/                            git에서 추적 안 함 (*.csv, *.json은 .gitignore)
+├── scripts/                         분석·시각화 보조 스크립트 (src 건드리지 않는 one-shot)
+│   ├── analyze_mdp_vs_env.py                    MDP vs PitchEnv 보상·전이 줄 단위 분석
+│   ├── generate_baseline_presentation.py        발표용 PNG 3종 생성
+│   ├── generate_presentation_charts.py          W&B 실험 결과 시각화
+│   ├── generate_pitch_location_heatmaps.py      투구 위치 히트맵
+│   └── single_pitcher_zone_breakdown.py         단일 투수 zone 분포 분석
+│
+├── data/                            git에서 추적 안 함 (*.csv, *.json, *.pkl은 .gitignore)
 │   ├── batter_clusters_2023.csv         타자 군집 매핑 (batter_clustering.py가 생성)
 │   ├── pitcher_clusters_2023.csv        투수 군집 매핑 (pitcher_clustering.py가 생성)
 │   ├── feature_columns_universal.json   범용 모델 입력 피처 목록 (universal_model_trainer.py가 생성)
 │   ├── target_classes_universal.json    범용 모델 출력 클래스 목록 (universal_model_trainer.py가 생성)
-│   └── model_config_universal.json      범용 모델 아키텍처 설정 {"hidden_dims", "dropout_rate"}
+│   ├── model_config_universal.json      범용 모델 아키텍처 설정 {"hidden_dims", "dropout_rate"}
+│   └── mdp_optimal_policy.pkl           MDPOptimizer.solve_mdp() 결과 캐시 (evaluate_baselines.py 생성)
 │
 ├── docs/
-│   └── work_log_20260329_30.md      작업 로그 (학습용)
+│   ├── baseline_comparison.md           Cole 2019 5-agent 비교 결과
+│   ├── baseline_by_cluster.md           투수 군집별(K=4) 5-agent 비교 결과
+│   ├── mdp_vs_env_reward_analysis.md    MDP vs PitchEnv 줄 단위 분석 + VI 수렴/정책/trace
+│   ├── experiment_comparison.md         범용 MLP Exp1~5 비교
+│   └── work_log_20260329_30.md          작업 로그 (학습용)
 │
 ├── best_transition_model_universal.pth  범용 MLP 가중치 (gitignored *.pth)
 ├── smartpitch_dqn_final.zip             최종 DQN 모델 (gitignored *.zip)
@@ -283,13 +296,20 @@ git log --oneline -5
 ## 현재 성능 수치
 
 ```
-[범용 모델 — Exp1 BiggerModel [256,128,64], 4클래스, 2023 MLB 72만 건]
-MLP val_accuracy : 58.1%
-MLP val_loss     : 1.0077  (unweighted CrossEntropyLoss)
+[범용 모델 — 현재 canonical: Exp5 CW+Physical [256,128,64], 4클래스, 2023 MLB 72만 건]
+MLP val_accuracy : 57.5%   (macro F1 0.495 — 소수 클래스 recall 우선)
+Top-1 최고 (Exp4 PhysicalFeatures): 58.3% / Top-2 80.8% / Top-3 95.1%
 
 [DQN — Gerrit Cole 2019, W&B run: h4n3o0di]
 DQN 평균 보상    : 0.436   (100이닝 평가)
 DQN 주요 구종    : Fastball 51.3%, Slider 24.3%, Curveball 14.9%, Changeup 10.7%
+
+[베이스라인 비교 — evaluate_baselines.py, pitcher_cluster=0, 1000 ep, 동일 seed]
+DQN (ref)           : +0.436 ± 1.255   (action space ~52)
+Random              : +0.231 ± 1.098   (action space 117)
+Frequency (League)  : +0.223 ± 1.114
+MostFrequent        : +0.151 ± 1.197
+MDPPolicy (VI 5회)  : +0.151 ± 1.264
 ```
 
 ---
@@ -309,12 +329,19 @@ DQN 주요 구종    : Fastball 51.3%, Slider 24.3%, Curveball 14.9%, Changeup 1
 - [x] 4클래스 전환: hit_by_pitch 제거, ball/strike/foul/hit_into_play
 - [x] `model_config_universal.json` 도입: load_from_checkpoint 아키텍처 불일치 방지
 - [x] class-weighted CrossEntropyLoss 실험 (Exp3, foul/hit_into_play F1 개선 확인)
+- [x] Task 12 Phase 1: 투구 물리 피처(release_speed/pfx_x/pfx_z) 추가, Exp4 val_acc 58.3%
+- [x] Task 13: 베이스라인 5종 평가 스크립트 + 전체/군집별 비교 (docs/baseline_*.md)
+- [x] Task 14: MDP vs PitchEnv 보상 일관성 분석 (docs/mdp_vs_env_reward_analysis.md)
+  - 결론: 코드 버그 없음. MDP 열위 원인 = VI 5회 미수렴 + MLP 58% 보정 부족 + sample 오차
+- [x] Task 15: 발표용 시각화 자료 3종 (scripts/generate_baseline_presentation.py)
 
 ### 다음 우선순위
-1. **[High]** RE24 매트릭스 연도별 갱신 (현재 2019 하드코딩, pitch_env.py + mdp_solver.py 두 곳)
-2. **[Medium]** 인플레이 타구 확률 실데이터 기반 교체 (현재 70/15/10/5% 하드코딩)
-3. **[Medium]** DQN 강화: total_timesteps 300K→500K, exploration_fraction 0.30→0.40
-4. **[Low]** FastAPI 실시간 추천 API
+1. **[High]** 물리 피처 Phase 2: (pitcher_cluster × mapped_pitch_name) lookup 테이블
+2. **[High]** MDP solve_mdp 수렴 개선: 5회 → 10회 또는 δ<1e-4, γ=0.99 (Task 14 권고)
+3. **[High]** RE24 매트릭스 연도별 갱신 (현재 2019 하드코딩, pitch_env.py + mdp_solver.py 두 곳)
+4. **[Medium]** 인플레이 타구 확률 실데이터 기반 교체 (현재 70/15/10/5% 하드코딩)
+5. **[Medium]** 군집 1~3 DQN 학습 + DQN 강화 (300K→500K, exploration 0.30→0.40)
+6. **[Low]** FastAPI 실시간 추천 API
 
 ---
 
@@ -378,6 +405,19 @@ feature/task5-6-overnight      현재 작업 브랜치 (원격 동기화됨)
    - `clustering.py`: 단일 투수 구종 식별 (main.py 파이프라인 내부에서 호출)
    - `batter_clustering.py`: 전체 MLB 타자 유형 분류 (독립 실행 스크립트)
    - `pitcher_clustering.py`: 전체 MLB 투수 유형 분류 (독립 실행 스크립트)
+
+10. **`data/mdp_optimal_policy.pkl` 캐시**: `evaluate_baselines.py` 최초 실행 시 ~20분 걸리는
+    `MDPOptimizer.solve_mdp()` 결과(9,216 상태 정책)를 pickle로 저장.
+    `solve_mdp()` 로직(반복 횟수, γ, 보상식 등)을 바꾼 뒤에는 반드시 **이 파일을 삭제하고 재실행**해야
+    새 정책이 반영된다. 안 그러면 예전 정책으로 평가되어 변경 효과가 안 보임.
+
+11. **베이스라인 action space 불일치**: `evaluate_baselines.py`의 베이스라인은 universal 모델의
+    9 구종 × 13 존 = **117 액션**, DQN 참조값(+0.436)은 Cole 본인 4 구종 × 13 존 ≈ **52 액션**.
+    직접 비교 시 "DQN은 더 작은 탐색 공간에서 학습됨"을 각주로 명시 필요.
+
+12. **MDP vs PitchEnv 보상·전이 동등성**: `docs/mdp_vs_env_reward_analysis.md`에 줄 단위 검증
+    완료. 두 모듈은 보상식·전이 매핑·주자 진루가 모두 1:1 일치하며, 결정론적 버그는 없음.
+    MDP 열위는 순수하게 "기대값 vs 단일 sample + VI 미수렴 + MLP calibration"의 결합 효과.
 
 ---
 

@@ -1,7 +1,7 @@
 # SmartPitch TODO — 작업 리스트
 
 코드를 직접 읽고 현재 상태를 확인한 후 작성했습니다.
-마지막 업데이트: 2026-03-30
+마지막 업데이트: 2026-04-11
 
 ---
 
@@ -15,6 +15,21 @@
 - [x] **Task 추가** — model_config_universal.json: 아키텍처 불일치 방지, hidden_dims 영속화
 - [x] **Task 추가** — 실험 비교 기준: `min(val_loss)` → `max(val_acc)` (class-weighted loss 혼재 대응)
 - [x] **Task 11** — Top-K Accuracy 측정 추가 (Top-1/2/3, 커밋 89d64d1)
+- [x] **Task 12** — 투구 물리 피처 추가 (Phase 1): release_speed/pfx_x/pfx_z, Exp4 val_acc=58.3%, Exp5 macro F1=0.495 (커밋 a160553)
+- [x] **Task 13** — 베이스라인 5종 비교 평가 (커밋 3fd2352)
+  - `src/evaluate_baselines.py`: Random / MostFrequent / Frequency / MDPPolicy / DQN (Cole 2019 ref)
+  - 전체(cluster 0) + 군집별(K=4) 각 1000 에피소드, 동일 seed
+  - `data/mdp_optimal_policy.pkl` 캐시 (9,216 상태, 5회 VI 결과)
+  - `docs/baseline_comparison.md`, `docs/baseline_by_cluster.md`
+  - 결과: DQN +0.436 > Random +0.231 > Frequency +0.223 > MDP +0.151 > MostFrequent +0.151 (cluster 0)
+- [x] **Task 14** — MDP vs PitchEnv 보상 일관성 분석 (커밋 3fd2352)
+  - `scripts/analyze_mdp_vs_env.py`: 보상식·전이 로직 줄 단위 비교 + VI 수렴·정책 분포·episode trace
+  - `docs/mdp_vs_env_reward_analysis.md`: 6섹션 리포트
+  - 결론: 코드 버그 없음. MDP 열위 원인 = (1) VI 5회 미수렴(max|ΔV|=0.145), (2) MLP 58% 보정 부족으로 정책이 Knuckleball 70.5%에 편중, (3) stochastic env에서 단일 sample이 오차를 증폭
+- [x] **Task 15** — 발표용 시각화 자료 생성 (`scripts/generate_baseline_presentation.py`)
+  - `docs/presentation_baseline_overall.png` (Cole 2019 5-agent bar)
+  - `docs/presentation_baseline_by_cluster.png` (4군집 × 5에이전트 grouped bar)
+  - `docs/presentation_summary_table.png` (행별 최고값 강조 요약표)
 
 ---
 
@@ -31,7 +46,7 @@
 
 ---
 
-### 1순위: Task 12 — 투구 물리 피처 추가 (구속 / 수평·수직 무브먼트)
+### ~~1순위: Task 12 — 투구 물리 피처 추가~~ (Phase 1 완료, Phase 2 남음)
 
 **왜 필요한가**
 현재 MLP는 `mapped_pitch_name`(one-hot 9차원) + `zone`만 본다.
@@ -58,14 +73,14 @@
   - `_prepare_data()` X_num에 3개 피처 추가 (L228-235)
   - StandardScaler 필요 (스케일 차이 큼: 구속 80~100, pfx는 -2~2)
 
-**Phase 1 (MLP 재학습, 이번 세션)**
-- 피처 추가 후 재학습 → val_acc 비교
-- W&B 실험명: `Exp4_PhysicalFeatures`
+**Phase 1 (완료, 커밋 a160553)**
+- Exp4 PhysicalFeatures val_acc **58.3%** (+0.2pp)
+- Exp5 CW+Physical macro F1 **0.495**
 
-**Phase 2 (후속)** — PitchEnv/MDPOptimizer 추론 연결
-- 학습 데이터에서 (pitcher_cluster, mapped_pitch_name)별 평균
-  release_speed/pfx_x/pfx_z 테이블 CSV 생성
-- 추론 시 lookup으로 피처 구성
+**Phase 2 (우선순위 1로 상승)** — PitchEnv/MDPOptimizer 추론 연결
+- 현재 `PitchEnv._sample_outcome`/`MDPOptimizer.predict_proba`에서 물리 피처가 0으로 주입
+- Task 14 분석 결과 이것이 MDP 정책 편중(Knuckleball 70.5%)의 한 원인일 가능성
+- 학습 데이터에서 (pitcher_cluster, mapped_pitch_name)별 평균 CSV 생성 후 lookup
 
 **예상 난이도**: 쉬움 (Phase 1), 보통 (Phase 2)
 **선행 작업**: 없음
@@ -305,11 +320,15 @@ POST /recommend
 | ~~—~~ | ~~2~~ | ~~epochs 20, batch 256~~ | ~~쉬움~~ | ~~—~~ | ~~✅~~ | ~~✅~~ | ~~완료~~ |
 | ~~—~~ | ~~3~~ | ~~버그 수정 2건~~ | ~~쉬움~~ | ~~—~~ | ~~—~~ | ~~✅~~ | ~~완료~~ |
 | ~~—~~ | ~~4~~ | ~~EarlyStopping 추가~~ | ~~쉬움~~ | ~~—~~ | ~~✅~~ | ~~—~~ | ~~완료~~ |
-| **1** | 12 | 투구 물리 피처 추가 (구속/무브먼트) | 쉬움 | — | ✅✅ | ✅ | — |
-| **2** | 10 | 범용 모델 구종 군집화 통합 | 어려움 | — | ✅ | ✅✅ | — |
-| **3** | 5 | RE24 매트릭스 연도별 갱신 | 보통 | — | ✅ | ✅ | — |
-| **4** | 6 | 인플레이 타구 확률 실데이터 교체 | 보통 | — | ✅ | ✅ | — |
-| ~~—~~ | ~~11~~ | ~~Top-K Accuracy 측정 추가~~ | ~~쉬움~~ | ~~—~~ | ~~—~~ | ~~✅~~ | ~~완료~~ |
-| **5** | 7 | DQN 학습 강화 (300K→500K) | 쉬움 | — | ✅ | — | Task 12,10,5,6 이후 |
-| **6** | 8 | W&B Artifact 파이프라인 통합 | 보통 | — | — | ✅ | — |
-| **7** | 9 | FastAPI 실시간 추천 API | 어려움 | — | ✅ | — | Task 7 이후 |
+| ~~—~~ | ~~12P1~~ | ~~투구 물리 피처 추가 Phase 1~~ | ~~쉬움~~ | ~~—~~ | ~~✅✅~~ | ~~✅~~ | ~~완료~~ |
+| ~~—~~ | ~~13~~ | ~~베이스라인 5종 비교 평가~~ | ~~보통~~ | ~~—~~ | ~~—~~ | ~~✅~~ | ~~완료~~ |
+| ~~—~~ | ~~14~~ | ~~MDP vs PitchEnv 보상 분석~~ | ~~보통~~ | ~~—~~ | ~~—~~ | ~~✅✅~~ | ~~완료~~ |
+| ~~—~~ | ~~15~~ | ~~발표용 시각화 자료~~ | ~~쉬움~~ | ~~—~~ | ~~—~~ | ~~—~~ | ~~완료~~ |
+| **1** | 12P2 | 물리 피처 Phase 2 (lookup 테이블) | 보통 | — | ✅✅ | ✅ | Task 13/14 결과 반영 |
+| **2** | 16 | MDP solve_mdp 수렴 개선 (5→10회 또는 δ<1e-4, γ=0.99) | 쉬움 | — | ✅ | ✅ | Task 14 권고 |
+| **3** | 10 | 범용 모델 구종 군집화 통합 | 어려움 | — | ✅ | ✅✅ | — |
+| **4** | 5 | RE24 매트릭스 연도별 갱신 | 보통 | — | ✅ | ✅ | — |
+| **5** | 6 | 인플레이 타구 확률 실데이터 교체 | 보통 | — | ✅ | ✅ | — |
+| **6** | 7 | DQN 학습 강화 (300K→500K) + 군집 1~3 DQN 학습 | 쉬움 | — | ✅ | — | Task 12P2,10,5,6 이후 |
+| **7** | 8 | W&B Artifact 파이프라인 통합 | 보통 | — | — | ✅ | — |
+| **8** | 9 | FastAPI 실시간 추천 API | 어려움 | — | ✅ | — | Task 7 이후 |
