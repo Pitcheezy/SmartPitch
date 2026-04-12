@@ -11,10 +11,10 @@
 
 | Agent | Mean Reward ± Std | Pitch Entropy | Mean Pitches/Ep | Action Space | Notes |
 |---|---|---|---|---|---|
-| Random | +0.231 ± 1.098 | 2.197 | 7.55 | 117 |  |
-| MostFrequent (Cole 2019) | +0.151 ± 1.197 | -0.000 | 7.49 | 117 |  |
-| Frequency (2023 League) | +0.223 ± 1.114 | 1.856 | 7.13 | 117 |  |
-| Frequency (Cole 2019) | +0.149 ± 1.163 | 1.241 | 7.59 | 117 |  |
+| Random | +0.204 ± 1.156 | 2.197 | 7.48 | 117 |  |
+| MostFrequent (Cole 2019) | +0.220 ± 1.177 | -0.000 | 8.48 | 117 |  |
+| Frequency (2023 League) | +0.181 ± 1.155 | 1.855 | 7.64 | 117 |  |
+| Frequency (Cole 2019) | +0.224 ± 1.137 | 1.243 | 7.78 | 117 |  |
 | DQN (Cole 2019 ref) | +0.436 ± 1.255 | — | — | ~52 (Cole 식별 4구종 × 13존) | W&B run h4n3o0di |
 
 ## 비고
@@ -25,8 +25,9 @@
   action space ≈ 4 × 13 = 52로, 본 베이스라인의 117과 다릅니다.
 - 베이스라인은 universal 모델의 9개 구종 전체를 후보로 가지므로 탐색 공간이 더 큽니다.
   → DQN과의 직접 비교 시 "DQN은 더 작은 action space에서 학습됨"을 감안해야 합니다.
-- `release_speed_n / pfx_x_n / pfx_z_n` 물리 피처는 `PitchEnv._sample_outcome`에서 0으로 입력
-  되며, 이는 DQN 평가 시점과 동일한 조건입니다 (공정 비교).
+- `release_speed_n / pfx_x_n / pfx_z_n` 물리 피처는 `data/physical_feature_lookup.csv`에서
+  (pitcher_cluster, mapped_pitch_name)별 평균값을 lookup하여 입력됩니다 (Task 12 Phase 2).
+  DQN 레퍼런스(+0.436)는 물리 피처 0 입력 시점의 값이므로 직접 비교 시 이를 감안해야 합니다.
 
 ## 재실행
 

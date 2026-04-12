@@ -54,7 +54,8 @@ SmartPitch/
 │   ├── generate_baseline_presentation.py        발표용 PNG 3종 생성
 │   ├── generate_presentation_charts.py          W&B 실험 결과 시각화
 │   ├── generate_pitch_location_heatmaps.py      투구 위치 히트맵
-│   └── single_pitcher_zone_breakdown.py         단일 투수 zone 분포 분석
+│   ├── single_pitcher_zone_breakdown.py         단일 투수 zone 분포 분석
+│   └── generate_physical_lookup.py              물리 피처 lookup CSV 생성 (Task 12 Phase 2)
 │
 ├── data/                            git에서 추적 안 함 (*.csv, *.json, *.pkl은 .gitignore)
 │   ├── batter_clusters_2023.csv         타자 군집 매핑 (batter_clustering.py가 생성)
@@ -62,6 +63,7 @@ SmartPitch/
 │   ├── feature_columns_universal.json   범용 모델 입력 피처 목록 (universal_model_trainer.py가 생성)
 │   ├── target_classes_universal.json    범용 모델 출력 클래스 목록 (universal_model_trainer.py가 생성)
 │   ├── model_config_universal.json      범용 모델 아키텍처 설정 {"hidden_dims", "dropout_rate"}
+│   ├── physical_feature_lookup.csv      (pitcher_cluster, mapped_pitch_name)별 평균 물리 피처
 │   └── mdp_optimal_policy.pkl           MDPOptimizer.solve_mdp() 결과 캐시 (evaluate_baselines.py 생성)
 │
 ├── docs/
@@ -304,12 +306,12 @@ Top-1 최고 (Exp4 PhysicalFeatures): 58.3% / Top-2 80.8% / Top-3 95.1%
 DQN 평균 보상    : 0.436   (100이닝 평가)
 DQN 주요 구종    : Fastball 51.3%, Slider 24.3%, Curveball 14.9%, Changeup 10.7%
 
-[베이스라인 비교 — evaluate_baselines.py, pitcher_cluster=0, 1000 ep, 동일 seed]
-DQN (ref)           : +0.436 ± 1.255   (action space ~52)
-Random              : +0.231 ± 1.098   (action space 117)
-Frequency (League)  : +0.223 ± 1.114
-MostFrequent        : +0.151 ± 1.197
-MDPPolicy (VI 5회)  : +0.151 ± 1.264
+[베이스라인 비교 — evaluate_baselines.py, pitcher_cluster=0, 1000 ep, 물리피처 lookup 적용]
+DQN (ref)           : +0.436 ± 1.255   (action space ~52, 물리피처 미적용 시점)
+MDPPolicy (VI 5회)  : +0.247 ± 1.097   (action space 117, entropy=1.31)
+MostFrequent        : +0.220 ± 1.177
+Random              : +0.204 ± 1.156   (action space 117)
+Frequency (League)  : +0.175 ± 1.123
 ```
 
 ---
@@ -334,9 +336,13 @@ MDPPolicy (VI 5회)  : +0.151 ± 1.264
 - [x] Task 14: MDP vs PitchEnv 보상 일관성 분석 (docs/mdp_vs_env_reward_analysis.md)
   - 결론: 코드 버그 없음. MDP 열위 원인 = VI 5회 미수렴 + MLP 58% 보정 부족 + sample 오차
 - [x] Task 15: 발표용 시각화 자료 3종 (scripts/generate_baseline_presentation.py)
+- [x] Task 12 Phase 2: 물리 피처 lookup 테이블 (scripts/generate_physical_lookup.py)
+  - data/physical_feature_lookup.csv: (pitcher_cluster, mapped_pitch_name)별 평균 물리 피처
+  - pitch_env.py, mdp_solver.py에서 lookup 적용
+  - MDP 성능 +0.151 → +0.247 (+63%), Knuckleball 편중 해소
 
 ### 다음 우선순위
-1. **[High]** 물리 피처 Phase 2: (pitcher_cluster × mapped_pitch_name) lookup 테이블
+1. ~~**[High]** 물리 피처 Phase 2~~ (완료 — MDP +0.151→+0.247, Knuckleball 편중 해소)
 2. **[High]** MDP solve_mdp 수렴 개선: 5회 → 10회 또는 δ<1e-4, γ=0.99 (Task 14 권고)
 3. **[High]** RE24 매트릭스 연도별 갱신 (현재 2019 하드코딩, pitch_env.py + mdp_solver.py 두 곳)
 4. **[Medium]** 인플레이 타구 확률 실데이터 기반 교체 (현재 70/15/10/5% 하드코딩)

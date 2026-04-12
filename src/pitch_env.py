@@ -107,6 +107,26 @@ class PitchEnv(gym.Env):
         except Exception as e:
             print(f"[PitchEnv] Error reading pitcher cluster csv: {e}. K=1 fallback.")
 
+        # ── 물리 피처 lookup 테이블 로드 (Task 12 Phase 2) ──────────────────
+        # (pitcher_cluster, mapped_pitch_name) → (release_speed_n, pfx_x_n, pfx_z_n)
+        self.physical_lookup = {}
+        lookup_csv = os.path.join(os.path.dirname(__file__), "..", "data", "physical_feature_lookup.csv")
+        try:
+            if os.path.exists(lookup_csv):
+                df_lk = pd.read_csv(lookup_csv)
+                for _, row in df_lk.iterrows():
+                    key = (int(row['pitcher_cluster']), row['mapped_pitch_name'])
+                    self.physical_lookup[key] = {
+                        'release_speed_n': float(row['release_speed_n']),
+                        'pfx_x_n': float(row['pfx_x_n']),
+                        'pfx_z_n': float(row['pfx_z_n']),
+                    }
+                print(f"[PitchEnv] 물리 피처 lookup 로드 완료: {len(self.physical_lookup)}개 항목")
+            else:
+                print(f"[PitchEnv] Warning: '{lookup_csv}' 없음. 물리 피처는 0으로 채워집니다.")
+        except Exception as e:
+            print(f"[PitchEnv] Error reading physical lookup csv: {e}. 물리 피처 0 fallback.")
+
         # ── 행동 공간: 구종 × 존 (이산) ─────────────────────────────────────
         self.action_space = gym.spaces.Discrete(self.n_pitches * self.n_zones)
 
@@ -252,6 +272,14 @@ class PitchEnv(gym.Env):
         ]:
             if col in input_df.columns:
                 input_df[col] = float(val)
+
+        # 물리 피처: lookup 테이블에서 (pitcher_cluster, pitch) 기준 채움 (Task 12 Phase 2)
+        phys_key = (int(self.current_pitcher_cluster), pitch)
+        if phys_key in self.physical_lookup:
+            phys = self.physical_lookup[phys_key]
+            for col, val in phys.items():
+                if col in input_df.columns:
+                    input_df[col] = val
 
         # 카테고리 피처: 구종/존/타자군집/투수군집 one-hot
         for col_key, col_val in [

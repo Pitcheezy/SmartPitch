@@ -77,10 +77,10 @@
 - Exp4 PhysicalFeatures val_acc **58.3%** (+0.2pp)
 - Exp5 CW+Physical macro F1 **0.495**
 
-**Phase 2 (우선순위 1로 상승)** — PitchEnv/MDPOptimizer 추론 연결
-- 현재 `PitchEnv._sample_outcome`/`MDPOptimizer.predict_proba`에서 물리 피처가 0으로 주입
-- Task 14 분석 결과 이것이 MDP 정책 편중(Knuckleball 70.5%)의 한 원인일 가능성
-- 학습 데이터에서 (pitcher_cluster, mapped_pitch_name)별 평균 CSV 생성 후 lookup
+**Phase 2 (완료)** — PitchEnv/MDPOptimizer 추론 연결
+- `scripts/generate_physical_lookup.py` → `data/physical_feature_lookup.csv` (34행)
+- `pitch_env.py`, `mdp_solver.py`에서 (pitcher_cluster, mapped_pitch_name)별 lookup 적용
+- 결과: MDP +0.151 → **+0.247** (+63%), Knuckleball 편중 해소(entropy 1.3), 3/4 군집 MDP 1위
 
 **예상 난이도**: 쉬움 (Phase 1), 보통 (Phase 2)
 **선행 작업**: 없음
@@ -324,7 +324,7 @@ POST /recommend
 | ~~—~~ | ~~13~~ | ~~베이스라인 5종 비교 평가~~ | ~~보통~~ | ~~—~~ | ~~—~~ | ~~✅~~ | ~~완료~~ |
 | ~~—~~ | ~~14~~ | ~~MDP vs PitchEnv 보상 분석~~ | ~~보통~~ | ~~—~~ | ~~—~~ | ~~✅✅~~ | ~~완료~~ |
 | ~~—~~ | ~~15~~ | ~~발표용 시각화 자료~~ | ~~쉬움~~ | ~~—~~ | ~~—~~ | ~~—~~ | ~~완료~~ |
-| **1** | 12P2 | 물리 피처 Phase 2 (lookup 테이블) | 보통 | — | ✅✅ | ✅ | Task 13/14 결과 반영 |
+| ~~—~~ | ~~12P2~~ | ~~물리 피처 Phase 2 (lookup 테이블)~~ | ~~보통~~ | ~~—~~ | ~~✅✅~~ | ~~✅~~ | ~~완료~~ |
 | **2** | 16 | MDP solve_mdp 수렴 개선 (5→10회 또는 δ<1e-4, γ=0.99) | 쉬움 | — | ✅ | ✅ | Task 14 권고 |
 | **3** | 10 | 범용 모델 구종 군집화 통합 | 어려움 | — | ✅ | ✅✅ | — |
 | **4** | 5 | RE24 매트릭스 연도별 갱신 | 보통 | — | ✅ | ✅ | — |

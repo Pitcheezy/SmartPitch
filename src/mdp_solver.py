@@ -36,6 +36,7 @@ RE24 매트릭스:
     각 반복에서 모든 상태에 대해 최적 행동 탐색
     MLP를 매번 호출하므로 상태 수가 많을수록 느림 (GPU 권장)
 """
+import os
 import pandas as pd
 import numpy as np
 import wandb
@@ -79,6 +80,26 @@ class MDPOptimizer:
             '2_001': 0.353, '2_101': 0.471, '2_011': 0.580, '2_111': 0.736
         }
         
+        # ── 물리 피처 lookup 테이블 로드 (Task 12 Phase 2) ──────────────────
+        # (pitcher_cluster, mapped_pitch_name) → (release_speed_n, pfx_x_n, pfx_z_n)
+        self.physical_lookup = {}
+        lookup_csv = os.path.join(os.path.dirname(__file__), "..", "data", "physical_feature_lookup.csv")
+        try:
+            if os.path.exists(lookup_csv):
+                df_lk = pd.read_csv(lookup_csv)
+                for _, row in df_lk.iterrows():
+                    key = (str(int(row['pitcher_cluster'])), row['mapped_pitch_name'])
+                    self.physical_lookup[key] = {
+                        'release_speed_n': float(row['release_speed_n']),
+                        'pfx_x_n': float(row['pfx_x_n']),
+                        'pfx_z_n': float(row['pfx_z_n']),
+                    }
+                print(f"[MDPOptimizer] 물리 피처 lookup 로드 완료: {len(self.physical_lookup)}개 항목")
+            else:
+                print(f"[MDPOptimizer] Warning: '{lookup_csv}' 없음. 물리 피처는 0으로 채워집니다.")
+        except Exception as e:
+            print(f"[MDPOptimizer] Error reading physical lookup csv: {e}. 물리 피처 0 fallback.")
+
         self.state_values = {}
         self.optimal_policy = {}
 
@@ -247,6 +268,13 @@ class MDPOptimizer:
                             ('on_3b',   int(cur_runners[2])),
                         ]:
                             if col in input_df.columns: input_df[col] = val
+
+                        # 물리 피처: lookup 테이블에서 (pitcher_cluster, pitch) 기준 채움 (Task 12 Phase 2)
+                        phys_key = (cur_pitcher_cluster, pitch)
+                        if phys_key in self.physical_lookup:
+                            phys = self.physical_lookup[phys_key]
+                            for col, val in phys.items():
+                                if col in input_df.columns: input_df[col] = val
 
                         # 카테고리 피처: 구종/존/타자·투수군집 one-hot
                         for col_name, col_val in [
