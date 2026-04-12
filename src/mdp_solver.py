@@ -32,7 +32,8 @@ RE24 매트릭스:
     주의: 현재 2019 기준 하드코딩 → 향후 연도별 갱신 필요
 
 알고리즘:
-    Value Iteration을 5회 반복 (파울 카운트 사이클 수렴을 위해)
+    Value Iteration 최대 20회 반복 (max|ΔV| < 1e-4 조기 종료)
+    γ=0.99 할인율 적용 (foul self-loop 가치 무한 누적 방지)
     각 반복에서 모든 상태에 대해 최적 행동 탐색
     MLP를 매번 호출하므로 상태 수가 많을수록 느림 (GPU 권장)
 """
@@ -237,8 +238,15 @@ class MDPOptimizer:
         
         input_df_template = pd.DataFrame(np.zeros((1, len(self.feature_columns))), columns=self.feature_columns)
         
-        # 파울 시 카운트가 유지되는 사이클 구조를 해결하기 위해 Value Iteration을 5회 반복하여 수렴시킴
-        for iteration in range(5):
+        # Value Iteration: 최대 20회 반복, max|ΔV| < 1e-4이면 조기 종료
+        # γ=0.99: foul self-loop에서 가치 무한 누적 방지 (Task 16)
+        gamma = 0.99
+        max_iterations = 20
+        convergence_threshold = 1e-4
+
+        for iteration in range(max_iterations):
+            max_delta = 0.0  # 이번 반복의 최대 가치 변화량
+
             # 역순 탐색 (3-2부터 0-0까지)
             for state in states:
                 best_action = None
@@ -311,20 +319,27 @@ class MDPOptimizer:
                                 # 이 값이 양수이고 클수록 투수가 실점을 잘 억제했다는 의미
                                 immediate_reward = current_re24 - next_re24 - runs_scored
                                 
-                                expected_reward += total_prob * (immediate_reward + future_value)
-                                
+                                expected_reward += total_prob * (immediate_reward + gamma * future_value)
+
                         if expected_reward > best_expected_reward:
                             best_expected_reward = expected_reward
                             best_action = (pitch, zone)
                             
+                old_value = self.state_values[state]
                 self.state_values[state] = best_expected_reward
+                max_delta = max(max_delta, abs(best_expected_reward - old_value))
                 self.optimal_policy[state] = {
                     'pitch': best_action[0],
                     'zone': best_action[1],
                     'value': best_expected_reward
                 }
-                
-        print("MDP 연산(Value Iteration) 5회 반복 완료 및 최적 정책 수렴 완료!")
+
+            print(f"  VI iter {iteration + 1}/{max_iterations}: max|ΔV| = {max_delta:.6f}")
+            if max_delta < convergence_threshold:
+                print(f"  수렴 완료 (max|ΔV| < {convergence_threshold})")
+                break
+
+        print(f"MDP 연산(Value Iteration) {iteration + 1}회 반복 완료! (γ={gamma}, max|ΔV|={max_delta:.6f})")
 
     def log_policy_to_wandb(self):
         """

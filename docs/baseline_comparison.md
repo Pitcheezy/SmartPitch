@@ -25,9 +25,8 @@
   action space ≈ 4 × 13 = 52로, 본 베이스라인의 117과 다릅니다.
 - 베이스라인은 universal 모델의 9개 구종 전체를 후보로 가지므로 탐색 공간이 더 큽니다.
   → DQN과의 직접 비교 시 "DQN은 더 작은 action space에서 학습됨"을 감안해야 합니다.
-- `release_speed_n / pfx_x_n / pfx_z_n` 물리 피처는 `data/physical_feature_lookup.csv`에서
-  (pitcher_cluster, mapped_pitch_name)별 평균값을 lookup하여 입력됩니다 (Task 12 Phase 2).
-  DQN 레퍼런스(+0.436)는 물리 피처 0 입력 시점의 값이므로 직접 비교 시 이를 감안해야 합니다.
+- `release_speed_n / pfx_x_n / pfx_z_n` 물리 피처는 `PitchEnv._sample_outcome`에서 0으로 입력
+  되며, 이는 DQN 평가 시점과 동일한 조건입니다 (공정 비교).
 
 ## 재실행
 

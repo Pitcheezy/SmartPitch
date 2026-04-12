@@ -111,8 +111,8 @@ Exp4 val_accuracy: 58.3%  Top-2: 80.8%  Top-3: 95.1%  val_loss: 0.9995
 DQN 평균 보상    : 0.436   (100이닝 평가)
 DQN 주요 구종    : Fastball 51.3%, Slider 24.3%, Curveball 14.9%, Changeup 10.7%
 
-[베이스라인 비교 — evaluate_baselines.py, pitcher_cluster=0, 1000 ep, 물리피처 lookup 적용]
-MDPPolicy          : +0.247 ± 1.097   (VI 5회, 9216 상태, entropy=1.31)
+[베이스라인 비교 — evaluate_baselines.py, pitcher_cluster=0, 1000 ep, 물리피처 lookup + VI 17회 γ=0.99]
+MDPPolicy          : +0.250 ± 1.093   (VI 17회 수렴, 9216 상태, entropy=1.29)
 MostFrequent       : +0.220 ± 1.177
 Random             : +0.204 ± 1.156   (117 action space)
 Frequency (League) : +0.175 ± 1.123
@@ -128,11 +128,11 @@ DQN (Cole 2019 ref): +0.436 ± 1.255   (~52 action space, 물리피처 미적용
 `pitch_env.py`, `mdp_solver.py`에서 (pitcher_cluster, mapped_pitch_name)별 평균 물리 피처 lookup 적용.
 MDP 성능 +0.151 → +0.247 (+63%), Knuckleball 편중 해소(entropy 0→1.3), 3/4 군집에서 MDP 1위.
 
-### [우선순위 2] MDP solve_mdp 수렴 개선 (Task 14 권고)
-- 현재 `for iteration in range(5)` 고정 → iter 5에서 max|ΔV|=0.145 (미수렴)
-- iter 10에서 max|ΔV|=0.0076 → 반복 10회 or `delta<1e-4` 조기 종료
-- γ=1 → γ=0.99로 self-loop foul 무한 누적 방지
-- 수정 후 `data/mdp_optimal_policy.pkl` 삭제하고 재실행
+### ~~[우선순위 2] MDP solve_mdp 수렴 개선 (Task 16)~~ (완료)
+- VI 5회 고정 → 최대 20회 + max|ΔV| < 1e-4 조기종료 (17회에서 수렴)
+- γ=1.0 → γ=0.99로 foul self-loop 무한 누적 방지
+- 효과: cluster 0 MDP +0.247 → +0.250 (미미한 개선, 안정성 확보)
+- 군집 3 부진(+0.048)은 VI 미수렴이 아닌 MLP calibration 문제로 확인
 
 ### [우선순위 3] 범용 모델 구종 군집화 통합 (Task 10)
 학습-추론 구종 분류 불일치 문제 (학습: Statcast pitch_type, 추론: 물리 군집).

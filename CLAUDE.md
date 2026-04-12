@@ -306,9 +306,9 @@ Top-1 최고 (Exp4 PhysicalFeatures): 58.3% / Top-2 80.8% / Top-3 95.1%
 DQN 평균 보상    : 0.436   (100이닝 평가)
 DQN 주요 구종    : Fastball 51.3%, Slider 24.3%, Curveball 14.9%, Changeup 10.7%
 
-[베이스라인 비교 — evaluate_baselines.py, pitcher_cluster=0, 1000 ep, 물리피처 lookup 적용]
+[베이스라인 비교 — evaluate_baselines.py, pitcher_cluster=0, 1000 ep, 물리피처 lookup + VI 17회 γ=0.99]
 DQN (ref)           : +0.436 ± 1.255   (action space ~52, 물리피처 미적용 시점)
-MDPPolicy (VI 5회)  : +0.247 ± 1.097   (action space 117, entropy=1.31)
+MDPPolicy (VI 17회) : +0.250 ± 1.093   (action space 117, entropy=1.29)
 MostFrequent        : +0.220 ± 1.177
 Random              : +0.204 ± 1.156   (action space 117)
 Frequency (League)  : +0.175 ± 1.123
@@ -340,10 +340,13 @@ Frequency (League)  : +0.175 ± 1.123
   - data/physical_feature_lookup.csv: (pitcher_cluster, mapped_pitch_name)별 평균 물리 피처
   - pitch_env.py, mdp_solver.py에서 lookup 적용
   - MDP 성능 +0.151 → +0.247 (+63%), Knuckleball 편중 해소
+- [x] Task 16: MDP 수렴 개선 (VI 5→17회 조기종료, γ=0.99)
+  - max|ΔV| < 1e-4 수렴 기준, 17회에서 수렴 (max|ΔV|=0.000075)
+  - MDP +0.247 → +0.250 (미미, 안정성 확보)
 
 ### 다음 우선순위
 1. ~~**[High]** 물리 피처 Phase 2~~ (완료 — MDP +0.151→+0.247, Knuckleball 편중 해소)
-2. **[High]** MDP solve_mdp 수렴 개선: 5회 → 10회 또는 δ<1e-4, γ=0.99 (Task 14 권고)
+2. ~~**[High]** MDP solve_mdp 수렴 개선~~ (완료 — VI 17회 수렴, γ=0.99, MDP +0.250)
 3. **[High]** RE24 매트릭스 연도별 갱신 (현재 2019 하드코딩, pitch_env.py + mdp_solver.py 두 곳)
 4. **[Medium]** 인플레이 타구 확률 실데이터 기반 교체 (현재 70/15/10/5% 하드코딩)
 5. **[Medium]** 군집 1~3 DQN 학습 + DQN 강화 (300K→500K, exploration 0.30→0.40)
