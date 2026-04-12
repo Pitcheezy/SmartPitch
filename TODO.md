@@ -27,6 +27,10 @@
   - `docs/mdp_vs_env_reward_analysis.md`: 6섹션 리포트
   - 결론: 코드 버그 없음. MDP 열위 원인 = (1) VI 5회 미수렴(max|ΔV|=0.145), (2) MLP 58% 보정 부족으로 정책이 Knuckleball 70.5%에 편중, (3) stochastic env에서 단일 sample이 오차를 증폭
 - [x] **Task 15** — 발표용 시각화 자료 생성 (`scripts/generate_baseline_presentation.py`)
+- [x] **Task 16** — MDP 수렴 개선: VI 최대 20회 + γ=0.99 + δ<1e-4 조기종료 (17회 수렴, MDP +0.250)
+- [x] **Task 17** — 군집 1~3 DQN 학습 (`scripts/train_dqn_all_clusters.py`, 300K timesteps, 117 action space)
+  - Cluster 1: +0.255 ± 1.154, Cluster 2: +0.184 ± 1.214, Cluster 3: +0.242 ± 1.134
+  - 모든 군집에서 Knuckleball 편중 (36~58%) — MLP calibration 이슈
   - `docs/presentation_baseline_overall.png` (Cole 2019 5-agent bar)
   - `docs/presentation_baseline_by_cluster.png` (4군집 × 5에이전트 grouped bar)
   - `docs/presentation_summary_table.png` (행별 최고값 강조 요약표)

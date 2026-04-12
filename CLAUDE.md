@@ -55,7 +55,8 @@ SmartPitch/
 │   ├── generate_presentation_charts.py          W&B 실험 결과 시각화
 │   ├── generate_pitch_location_heatmaps.py      투구 위치 히트맵
 │   ├── single_pitcher_zone_breakdown.py         단일 투수 zone 분포 분석
-│   └── generate_physical_lookup.py              물리 피처 lookup CSV 생성 (Task 12 Phase 2)
+│   ├── generate_physical_lookup.py              물리 피처 lookup CSV 생성 (Task 12 Phase 2)
+│   └── train_dqn_all_clusters.py               군집별 DQN 학습 + 평가 (Task 17)
 │
 ├── data/                            git에서 추적 안 함 (*.csv, *.json, *.pkl은 .gitignore)
 │   ├── batter_clusters_2023.csv         타자 군집 매핑 (batter_clustering.py가 생성)
@@ -239,7 +240,7 @@ X_encoded = pd.concat([X_num, X_cat_encoded], axis=1).astype(float)  # pandas 3.
 | 투수 군집 K=4~8 탐색 | 실루엣 최대 K 선택 | 2023 시즌 결과 K=4 선택됨(0.4502) |
 | 좌/우타 분리 군집화 | batter_clustering.py | 동일 수치가 좌우타에서 다른 의미를 가짐 |
 | 투수 군집 좌/우투 미분리 | pitcher_clustering.py | 릴리스 포인트(pfx_x, release_pos_x)가 대리 지표로 작동 |
-| Value Iteration 5회 | mdp_solver.py | 파울 시 카운트가 유지되는 순환 구조 수렴 필요 |
+| Value Iteration 최대 20회 + γ=0.99 | mdp_solver.py | 파울 셀프루프 수렴 + 가치 무한 누적 방지 |
 | 인플레이 타구 확률 하드코딩 | pitch_env.py, mdp_solver.py | 70% 아웃, 15% 1루타, 10% 2루타, 5% 홈런 |
 | pitcher_cluster 전달 방식 | main.py → MDPOptimizer/PitchEnv | MDPOptimizer: `pitcher_clusters=["0","1","2","3"]` (문자열 리스트), PitchEnv: `pitcher_cluster=0` (int, 고정 모드) |
 | MLP 입력 count_state 형식 | `"3-2_2_111"` (볼-스트라이크_아웃_주자) | mdp_solver와 pitch_env가 동일 형식 사용 |
@@ -303,8 +304,13 @@ MLP val_accuracy : 57.5%   (macro F1 0.495 — 소수 클래스 recall 우선)
 Top-1 최고 (Exp4 PhysicalFeatures): 58.3% / Top-2 80.8% / Top-3 95.1%
 
 [DQN — Gerrit Cole 2019, W&B run: h4n3o0di]
-DQN 평균 보상    : 0.436   (100이닝 평가)
+DQN 평균 보상    : 0.436   (100이닝 평가, action space ~52)
 DQN 주요 구종    : Fastball 51.3%, Slider 24.3%, Curveball 14.9%, Changeup 10.7%
+
+[DQN — 군집별 범용 모델 학습 (117 action space, 300K timesteps, 1000 ep 평가)]
+Cluster 1: +0.255 ± 1.154  (Knuckleball 45%, Fastball 14%, Cutter 13%)
+Cluster 2: +0.184 ± 1.214  (Knuckleball 36%, Fastball 23%, Splitter 20%)
+Cluster 3: +0.242 ± 1.134  (Knuckleball 58%, Sinker 11%, Fastball 8%)
 
 [베이스라인 비교 — evaluate_baselines.py, pitcher_cluster=0, 1000 ep, 물리피처 lookup + VI 17회 γ=0.99]
 DQN (ref)           : +0.436 ± 1.255   (action space ~52, 물리피처 미적용 시점)
@@ -343,13 +349,17 @@ Frequency (League)  : +0.175 ± 1.123
 - [x] Task 16: MDP 수렴 개선 (VI 5→17회 조기종료, γ=0.99)
   - max|ΔV| < 1e-4 수렴 기준, 17회에서 수렴 (max|ΔV|=0.000075)
   - MDP +0.247 → +0.250 (미미, 안정성 확보)
+- [x] Task 17: 군집 1~3 DQN 학습 (scripts/train_dqn_all_clusters.py)
+  - 300K timesteps, 117 action space, 1000 ep 평가
+  - Cluster 1: +0.255, Cluster 2: +0.184, Cluster 3: +0.242
+  - Knuckleball 편중 (36~58%) — MLP calibration 이슈
 
 ### 다음 우선순위
-1. ~~**[High]** 물리 피처 Phase 2~~ (완료 — MDP +0.151→+0.247, Knuckleball 편중 해소)
-2. ~~**[High]** MDP solve_mdp 수렴 개선~~ (완료 — VI 17회 수렴, γ=0.99, MDP +0.250)
-3. **[High]** RE24 매트릭스 연도별 갱신 (현재 2019 하드코딩, pitch_env.py + mdp_solver.py 두 곳)
-4. **[Medium]** 인플레이 타구 확률 실데이터 기반 교체 (현재 70/15/10/5% 하드코딩)
-5. **[Medium]** 군집 1~3 DQN 학습 + DQN 강화 (300K→500K, exploration 0.30→0.40)
+1. ~~**[High]** 물리 피처 Phase 2~~ (완료)
+2. ~~**[High]** MDP solve_mdp 수렴 개선~~ (완료)
+3. ~~**[Medium]** 군집 1~3 DQN 학습~~ (완료 — Knuckleball 편중 확인)
+4. **[High]** RE24 매트릭스 연도별 갱신 (현재 2019 하드코딩, pitch_env.py + mdp_solver.py 두 곳)
+5. **[Medium]** 인플레이 타구 확률 실데이터 기반 교체 (현재 70/15/10/5% 하드코딩)
 6. **[Low]** FastAPI 실시간 추천 API
 
 ---

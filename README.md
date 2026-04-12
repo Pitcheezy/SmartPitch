@@ -59,7 +59,8 @@ SmartPitch/
 │   ├── generate_presentation_charts.py  W&B 실험 결과 발표용 차트
 │   ├── generate_pitch_location_heatmaps.py  투구 위치 히트맵
 │   ├── single_pitcher_zone_breakdown.py     단일 투수 zone 분포 분석
-│   └── generate_physical_lookup.py          물리 피처 lookup CSV 생성
+│   ├── generate_physical_lookup.py          물리 피처 lookup CSV 생성
+│   └── train_dqn_all_clusters.py            군집별 DQN 학습 + 평가 (1~3)
 ├── data/                            (gitignored — 클론 후 생성 필요)
 │   ├── batter_clusters_2023.csv         타자 군집 매핑 (batter_id → cluster 0~7)
 │   ├── pitcher_clusters_2023.csv        투수 군집 매핑 (pitcher_id → cluster 0~3)

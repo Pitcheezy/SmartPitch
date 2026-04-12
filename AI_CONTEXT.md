@@ -108,8 +108,13 @@ MLP macro F1     : 0.495   (foul 0.285, hit_into_play 0.415 — 소수 클래스
 Exp4 val_accuracy: 58.3%  Top-2: 80.8%  Top-3: 95.1%  val_loss: 0.9995
 
 [DQN — Gerrit Cole 2019 파이프라인 실행, W&B run: h4n3o0di]
-DQN 평균 보상    : 0.436   (100이닝 평가)
+DQN 평균 보상    : 0.436   (100이닝 평가, action space ~52)
 DQN 주요 구종    : Fastball 51.3%, Slider 24.3%, Curveball 14.9%, Changeup 10.7%
+
+[DQN — 군집별 범용 모델 학습 (117 action space, 300K timesteps, 1000 ep 평가)]
+Cluster 1: +0.255 ± 1.154  (Knuckleball 45%, Fastball 14%, Cutter 13%)
+Cluster 2: +0.184 ± 1.214  (Knuckleball 36%, Fastball 23%, Splitter 20%)
+Cluster 3: +0.242 ± 1.134  (Knuckleball 58%, Sinker 11%, Fastball 8%)
 
 [베이스라인 비교 — evaluate_baselines.py, pitcher_cluster=0, 1000 ep, 물리피처 lookup + VI 17회 γ=0.99]
 MDPPolicy          : +0.250 ± 1.093   (VI 17회 수렴, 9216 상태, entropy=1.29)
@@ -145,12 +150,12 @@ MDP 성능 +0.151 → +0.247 (+63%), Knuckleball 편중 해소(entropy 0→1.3),
 현재 아웃 70%, 1루타 15%, 2루타 10%, 홈런 5%로 임의 설정.
 pitch_env.py + mdp_solver.py 두 곳 동시 수정 필요.
 
-### [우선순위 6] DQN 학습 강화 + 군집 1~3 DQN 학습
-```python
-# main.py wandb config 수정:
-"dqn_total_timesteps": 500_000      # 300K → 500K
-"dqn_exploration_fraction": 0.40    # 0.30 → 0.40
-```
+### ~~[우선순위 6] 군집 1~3 DQN 학습~~ (완료)
+- `scripts/train_dqn_all_clusters.py` 작성, 군집 1~3 각 300K 타임스텝 학습
+- 결과: cluster 1 +0.255, cluster 2 +0.184, cluster 3 +0.242
+- 모든 군집에서 Knuckleball 편중 (36~58%) — MLP calibration 이슈
+- action space 117 (9구종×13존) vs cluster 0 DQN ~52 (Cole 4구종×13존)
+- 모델 저장: `data/dqn_cluster_{1,2,3}.zip`
 
 ### [우선순위 7 — 미래] 실시간 추천 API
 ```

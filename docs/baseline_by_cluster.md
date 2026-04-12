@@ -26,17 +26,17 @@
 | 1 | MostFrequent | +0.140 ± 1.188 | -0.000 | 6.78 |
 | 1 | Frequency | +0.141 ± 1.175 | 1.813 | 7.57 |
 | 1 | MDPPolicy | +0.230 ± 1.178 | 0.418 | 10.77 |
-| 1 | DQN | 미학습 | — | — |
+| 1 | DQN (117 actions) | +0.255 ± 1.154 | — | 8.96 |
 | 2 | Random | +0.209 ± 1.190 | 2.197 | 7.91 |
 | 2 | MostFrequent | +0.201 ± 1.123 | -0.000 | 7.38 |
 | 2 | Frequency | +0.211 ± 1.101 | 1.761 | 7.67 |
 | 2 | MDPPolicy | +0.260 ± 1.101 | 1.369 | 8.00 |
-| 2 | DQN | 미학습 | — | — |
+| 2 | DQN (117 actions) | +0.184 ± 1.214 | — | 8.80 |
 | 3 | Random | +0.203 ± 1.145 | 2.197 | 7.86 |
 | 3 | MostFrequent | +0.251 ± 1.128 | -0.000 | 8.74 |
 | 3 | Frequency | +0.202 ± 1.158 | 1.882 | 7.70 |
 | 3 | MDPPolicy | +0.048 ± 1.439 | 0.611 | 12.41 |
-| 3 | DQN | 미학습 | — | — |
+| 3 | DQN (117 actions) | +0.242 ± 1.134 | — | 10.53 |
 
 ## 비고
 
@@ -46,7 +46,12 @@
 - MDPPolicy는 `MDPOptimizer.solve_mdp()`로 9,216개 상태 전체에 대해 한 번만 풀고
   `data/mdp_optimal_policy.pkl`로 캐시. obs(8D) → state key `"b-s_outs_runners_bc_pc"` 변환 후 lookup.
   모든 군집에서 동일한 정책을 공유하지만 PitchEnv 시뮬레이션 시 `pitcher_cluster`만 달라짐.
-- DQN 행: 군집 0(Cole 2019)만 W&B run `h4n3o0di`의 평가값(+0.436 ± 1.255). 군집 1~3은 학습된 적 없음.
+- DQN 행: 군집 0(Cole 2019)은 W&B run `h4n3o0di`의 평가값(+0.436 ± 1.255, action space ~52).
+  군집 1~3은 범용 모델 기반 9구종×13존=117 action space로 학습(300K 타임스텝).
+  **action space 차이 주의**: 군집 0 DQN은 Cole 본인 4구종만 사용(~52), 군집 1~3은 전체 9구종(117).
+- 군집 1~3 DQN 모두 Knuckleball 편중 (36~58%) — MLP calibration 이슈.
+  실제 MLB에서 Knuckleball 투수는 극소수이나, MLP가 Knuckleball에 대해 strike/foul 확률을
+  과대추정하여 DQN이 이를 최적으로 학습함. 향후 MLP 개선 또는 action masking 필요.
 - 동일 seed로 환경 reset(`seed=0..999`) → 군집/에이전트 간 공정 비교
 
 ## 재실행
