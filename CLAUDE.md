@@ -307,17 +307,17 @@ Top-1 최고 (Exp4 PhysicalFeatures): 58.3% / Top-2 80.8% / Top-3 95.1%
 DQN 평균 보상    : 0.436   (100이닝 평가, action space ~52)
 DQN 주요 구종    : Fastball 51.3%, Slider 24.3%, Curveball 14.9%, Changeup 10.7%
 
-[DQN — 군집별 범용 모델 학습 (117 action space, 300K timesteps, 1000 ep 평가)]
-Cluster 1: +0.255 ± 1.154  (Knuckleball 45%, Fastball 14%, Cutter 13%)
-Cluster 2: +0.184 ± 1.214  (Knuckleball 36%, Fastball 23%, Splitter 20%)
-Cluster 3: +0.242 ± 1.134  (Knuckleball 58%, Sinker 11%, Fastball 8%)
+[DQN — 군집별 범용 모델 학습 (Task 18: 유효 구종만 사용, 300K timesteps, 1000 ep 평가)]
+Cluster 1: +0.188 ± 1.127  (Slider 30%, Fastball 28%, Curveball 15%) — 91 actions (7구종)
+Cluster 2: +0.242 ± 1.130  (Fastball 56%, Sinker 12%, Slider 10%) — 104 actions (8구종)
+Cluster 3: +0.215 ± 1.157  (Fastball 45%, Splitter 13%, Curveball 12%) — 104 actions (8구종)
+※ Knuckleball 편중 0%로 완전 해소
 
-[베이스라인 비교 — evaluate_baselines.py, pitcher_cluster=0, 1000 ep, 물리피처 lookup + VI 17회 γ=0.99]
-DQN (ref)           : +0.436 ± 1.255   (action space ~52, 물리피처 미적용 시점)
-MDPPolicy (VI 17회) : +0.250 ± 1.093   (action space 117, entropy=1.29)
-MostFrequent        : +0.220 ± 1.177
-Random              : +0.204 ± 1.156   (action space 117)
-Frequency (League)  : +0.175 ± 1.123
+[베이스라인 비교 — evaluate_baselines.py, 1000 ep, Task 18 action space 최적화 후]
+군집 0: DQN +0.436 > MDP +0.258 > MostFreq +0.220 > Random +0.185 > Freq +0.175 (DQN 최고)
+군집 1: MDP +0.247 > DQN +0.188 > Freq +0.169 > MostFreq +0.140 > Random +0.136 (MDP 최고)
+군집 2: MDP +0.262 > DQN +0.242 > Random +0.229 > Freq +0.203 > MostFreq +0.201 (MDP 최고)
+군집 3: MDP +0.256 > MostFreq +0.251 > DQN +0.215 > Freq +0.202 > Random +0.171 (MDP 최고)
 ```
 
 ---
@@ -350,17 +350,23 @@ Frequency (League)  : +0.175 ± 1.123
   - max|ΔV| < 1e-4 수렴 기준, 17회에서 수렴 (max|ΔV|=0.000075)
   - MDP +0.247 → +0.250 (미미, 안정성 확보)
 - [x] Task 17: 군집 1~3 DQN 학습 (scripts/train_dqn_all_clusters.py)
-  - 300K timesteps, 117 action space, 1000 ep 평가
-  - Cluster 1: +0.255, Cluster 2: +0.184, Cluster 3: +0.242
-  - Knuckleball 편중 (36~58%) — MLP calibration 이슈
+  - 300K timesteps, 1000 ep 평가
+  - Task 18에서 유효 구종만으로 재학습
+- [x] Task 18: Action Space 최적화 (get_valid_pitches() + DQN 재학습)
+  - get_valid_pitches(): physical_feature_lookup.csv에서 1% 미만 구종 자동 제거
+  - Knuckleball 편중 0%로 완전 해소, 현실적 구종 분포 달성
+  - 군집별 action space: 군집 0=104(8구종), 군집 1=91(7구종), 군집 2~3=104(8구종)
+  - MDP 전 군집 재계산 (VI 18회 수렴), DQN 군집 1~3 재학습
+  - 결과: 군집 0에서는 DQN 최고(+0.436), 군집 1~3에서는 MDP 최고
 
 ### 다음 우선순위
 1. ~~**[High]** 물리 피처 Phase 2~~ (완료)
 2. ~~**[High]** MDP solve_mdp 수렴 개선~~ (완료)
-3. ~~**[Medium]** 군집 1~3 DQN 학습~~ (완료 — Knuckleball 편중 확인)
-4. **[High]** RE24 매트릭스 연도별 갱신 (현재 2019 하드코딩, pitch_env.py + mdp_solver.py 두 곳)
-5. **[Medium]** 인플레이 타구 확률 실데이터 기반 교체 (현재 70/15/10/5% 하드코딩)
-6. **[Low]** FastAPI 실시간 추천 API
+3. ~~**[Medium]** 군집 1~3 DQN 학습~~ (완료)
+4. ~~**[High]** Action Space 최적화~~ (완료 — Knuckleball 편중 해소)
+5. **[High]** RE24 매트릭스 연도별 갱신 (현재 2019 하드코딩, pitch_env.py + mdp_solver.py 두 곳)
+6. **[Medium]** 인플레이 타구 확률 실데이터 기반 교체 (현재 70/15/10/5% 하드코딩)
+7. **[Low]** FastAPI 실시간 추천 API
 
 ---
 
@@ -430,9 +436,9 @@ feature/task5-6-overnight      현재 작업 브랜치 (원격 동기화됨)
     `solve_mdp()` 로직(반복 횟수, γ, 보상식 등)을 바꾼 뒤에는 반드시 **이 파일을 삭제하고 재실행**해야
     새 정책이 반영된다. 안 그러면 예전 정책으로 평가되어 변경 효과가 안 보임.
 
-11. **베이스라인 action space 불일치**: `evaluate_baselines.py`의 베이스라인은 universal 모델의
-    9 구종 × 13 존 = **117 액션**, DQN 참조값(+0.436)은 Cole 본인 4 구종 × 13 존 ≈ **52 액션**.
-    직접 비교 시 "DQN은 더 작은 탐색 공간에서 학습됨"을 각주로 명시 필요.
+11. **베이스라인 action space**: Task 18 이후 `get_valid_pitches()`로 군집별 유효 구종만 사용.
+    군집 0=104 액션(8구종×13존), 군집 1=91 액션(7구종), 군집 2~3=104 액션(8구종).
+    DQN 참조값(+0.436, Cole 2019)은 4 구종 × 13 존 ≈ **52 액션** (더 작은 탐색 공간).
 
 12. **MDP vs PitchEnv 보상·전이 동등성**: `docs/mdp_vs_env_reward_analysis.md`에 줄 단위 검증
     완료. 두 모듈은 보상식·전이 매핑·주자 진루가 모두 1:1 일치하며, 결정론적 버그는 없음.

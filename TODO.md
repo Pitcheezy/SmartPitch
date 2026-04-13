@@ -1,7 +1,7 @@
 # SmartPitch TODO — 작업 리스트
 
 코드를 직접 읽고 현재 상태를 확인한 후 작성했습니다.
-마지막 업데이트: 2026-04-11
+마지막 업데이트: 2026-04-13
 
 ---
 
@@ -28,12 +28,19 @@
   - 결론: 코드 버그 없음. MDP 열위 원인 = (1) VI 5회 미수렴(max|ΔV|=0.145), (2) MLP 58% 보정 부족으로 정책이 Knuckleball 70.5%에 편중, (3) stochastic env에서 단일 sample이 오차를 증폭
 - [x] **Task 15** — 발표용 시각화 자료 생성 (`scripts/generate_baseline_presentation.py`)
 - [x] **Task 16** — MDP 수렴 개선: VI 최대 20회 + γ=0.99 + δ<1e-4 조기종료 (17회 수렴, MDP +0.250)
-- [x] **Task 17** — 군집 1~3 DQN 학습 (`scripts/train_dqn_all_clusters.py`, 300K timesteps, 117 action space)
-  - Cluster 1: +0.255 ± 1.154, Cluster 2: +0.184 ± 1.214, Cluster 3: +0.242 ± 1.134
-  - 모든 군집에서 Knuckleball 편중 (36~58%) — MLP calibration 이슈
+- [x] **Task 17** — 군집 1~3 DQN 학습 (`scripts/train_dqn_all_clusters.py`, 300K timesteps)
+  - 초기 결과 (117 action space): Knuckleball 편중 36~58% → Task 18에서 해결
   - `docs/presentation_baseline_overall.png` (Cole 2019 5-agent bar)
   - `docs/presentation_baseline_by_cluster.png` (4군집 × 5에이전트 grouped bar)
   - `docs/presentation_summary_table.png` (행별 최고값 강조 요약표)
+- [x] **Task 18** — Action Space 최적화 + DQN 재학습
+  - `get_valid_pitches()` 함수 (`pitch_env.py`): 1% 미만 구종 자동 제거
+  - `mdp_solver.py`: `valid_pitches_by_cluster` 파라미터로 군집별 유효 구종 필터링
+  - `evaluate_baselines.py`: 전 군집 유효 구종 적용, MDP 재계산 (VI 18회 수렴)
+  - `train_dqn_all_clusters.py`: 군집별 유효 구종만으로 DQN 재학습
+  - Knuckleball 편중 0%로 완전 해소, 현실적 구종 분포 달성
+  - 군집별 action space: 군집 0=104(8구종), 군집 1=91(7구종), 군집 2~3=104(8구종)
+  - 결과: 군집 0 DQN 최고(+0.436), 군집 1~3 MDP 최고(+0.247/+0.262/+0.256)
 
 ---
 
@@ -330,9 +337,10 @@ POST /recommend
 | ~~—~~ | ~~15~~ | ~~발표용 시각화 자료~~ | ~~쉬움~~ | ~~—~~ | ~~—~~ | ~~—~~ | ~~완료~~ |
 | ~~—~~ | ~~12P2~~ | ~~물리 피처 Phase 2 (lookup 테이블)~~ | ~~보통~~ | ~~—~~ | ~~✅✅~~ | ~~✅~~ | ~~완료~~ |
 | ~~—~~ | ~~16~~ | ~~MDP solve_mdp 수렴 개선 (VI 17회 수렴, γ=0.99)~~ | ~~쉬움~~ | ~~—~~ | ~~✅~~ | ~~✅~~ | ~~완료~~ |
+| ~~—~~ | ~~18~~ | ~~Action Space 최적화 + DQN 재학습~~ | ~~보통~~ | ~~—~~ | ~~✅✅~~ | ~~✅~~ | ~~완료~~ |
 | **3** | 10 | 범용 모델 구종 군집화 통합 | 어려움 | — | ✅ | ✅✅ | — |
 | **4** | 5 | RE24 매트릭스 연도별 갱신 | 보통 | — | ✅ | ✅ | — |
 | **5** | 6 | 인플레이 타구 확률 실데이터 교체 | 보통 | — | ✅ | ✅ | — |
-| **6** | 7 | DQN 학습 강화 (300K→500K) + 군집 1~3 DQN 학습 | 쉬움 | — | ✅ | — | Task 12P2,10,5,6 이후 |
+| **6** | 7 | DQN 학습 강화 (300K→500K) | 쉬움 | — | ✅ | — | Task 10,5,6 이후 |
 | **7** | 8 | W&B Artifact 파이프라인 통합 | 보통 | — | — | ✅ | — |
 | **8** | 9 | FastAPI 실시간 추천 API | 어려움 | — | ✅ | — | Task 7 이후 |

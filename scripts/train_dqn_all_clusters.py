@@ -36,7 +36,7 @@ import numpy as np
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.model import TransitionProbabilityModel
-from src.pitch_env import PitchEnv
+from src.pitch_env import PitchEnv, get_valid_pitches
 from src.rl_trainer import DQNTrainer
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -72,9 +72,12 @@ def _evaluate_dqn(model_path, transition_model, pitch_names, zones, cluster_id,
     from stable_baselines3 import DQN
     from stable_baselines3.common.monitor import Monitor
 
+    # 군집별 유효 구종 필터링 (Task 18)
+    valid_pitches = get_valid_pitches(cluster_id, pitch_names)
+
     env = PitchEnv(
         transition_model=transition_model,
-        pitch_names=pitch_names,
+        pitch_names=valid_pitches,
         zones=zones,
         pitcher_cluster=cluster_id,
     )
@@ -116,7 +119,7 @@ def _evaluate_dqn(model_path, transition_model, pitch_names, zones, cluster_id,
         "mean_pitches_per_ep": round(mean_pitches, 2),
         "n_episodes": n_episodes,
         "pitch_distribution_pct": pitch_pct,
-        "action_space": len(pitch_names) * len(zones),
+        "action_space": len(valid_pitches) * len(zones),
     }
 
 
@@ -155,8 +158,13 @@ def train_and_evaluate(cluster_id, transition_model, pitch_names, zones,
             print(f"\n[cluster {cluster_id}] 모델 없음 ({model_zip}), 스킵")
         return
 
+    # 군집별 유효 구종 필터링 (Task 18)
+    valid_pitches = get_valid_pitches(cluster_id, pitch_names)
+
     print(f"\n{'='*60}")
     print(f"  DQN 학습 시작 — pitcher_cluster={cluster_id}")
+    print(f"  유효 구종: {valid_pitches} ({len(valid_pitches)}종)")
+    print(f"  액션 스페이스: {len(valid_pitches) * len(zones)}")
     print(f"  총 {total_timesteps:,} 타임스텝")
     print(f"{'='*60}")
 
@@ -176,8 +184,8 @@ def train_and_evaluate(cluster_id, transition_model, pitch_names, zones,
                     "exploration_final_eps": 0.05,
                     "gamma": 0.99,
                     "net_arch": [128, 64],
-                    "action_space": len(pitch_names) * len(zones),
-                    "pitch_names": pitch_names,
+                    "action_space": len(valid_pitches) * len(zones),
+                    "pitch_names": valid_pitches,
                     "n_zones": len(zones),
                 },
                 reinit=True,
@@ -187,16 +195,16 @@ def train_and_evaluate(cluster_id, transition_model, pitch_names, zones,
             use_wandb = False
 
     try:
-        # 환경 생성
+        # 환경 생성 (유효 구종만 사용)
         train_env = PitchEnv(
             transition_model=transition_model,
-            pitch_names=pitch_names,
+            pitch_names=valid_pitches,
             zones=zones,
             pitcher_cluster=cluster_id,
         )
         eval_env = PitchEnv(
             transition_model=transition_model,
-            pitch_names=pitch_names,
+            pitch_names=valid_pitches,
             zones=zones,
             pitcher_cluster=cluster_id,
         )

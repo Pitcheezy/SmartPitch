@@ -32,6 +32,53 @@ import pandas as pd
 from typing import List, Tuple, Optional
 
 
+def get_valid_pitches(cluster_id: int, all_pitch_names: List[str],
+                      min_pct: float = 0.01,
+                      lookup_csv: str = None) -> List[str]:
+    """
+    physical_feature_lookup.csv에서 해당 군집의 구종 비율을 계산하고
+    min_pct(기본 1%) 이상인 구종만 반환.
+
+    :param cluster_id:      투수 군집 ID (0~3)
+    :param all_pitch_names: 전체 구종 이름 리스트 (feature_columns에서 파싱한 것)
+    :param min_pct:         최소 비율 임계값 (0.01 = 1%)
+    :param lookup_csv:      physical_feature_lookup.csv 경로 (None이면 기본 경로)
+    :return: 유효 구종 이름 리스트 (정렬됨)
+    """
+    import os
+    if lookup_csv is None:
+        lookup_csv = os.path.join(os.path.dirname(__file__), "..", "data", "physical_feature_lookup.csv")
+
+    if not os.path.exists(lookup_csv):
+        print(f"[get_valid_pitches] lookup CSV 없음 → 전체 구종 반환")
+        return sorted(all_pitch_names)
+
+    df = pd.read_csv(lookup_csv)
+    df_c = df[df['pitcher_cluster'] == cluster_id]
+
+    if df_c.empty:
+        print(f"[get_valid_pitches] cluster {cluster_id} 데이터 없음 → 전체 구종 반환")
+        return sorted(all_pitch_names)
+
+    total = df_c['count'].sum()
+    valid = []
+    for _, row in df_c.iterrows():
+        pct = row['count'] / total
+        if pct >= min_pct and row['mapped_pitch_name'] in all_pitch_names:
+            valid.append(row['mapped_pitch_name'])
+
+    if not valid:
+        print(f"[get_valid_pitches] cluster {cluster_id} 유효 구종 없음 → 전체 구종 반환")
+        return sorted(all_pitch_names)
+
+    valid = sorted(valid)
+    excluded = sorted(set(all_pitch_names) - set(valid))
+    if excluded:
+        print(f"[get_valid_pitches] cluster {cluster_id}: {len(valid)}구종 유효, "
+              f"제외={excluded} (< {min_pct*100:.0f}%)")
+    return valid
+
+
 class PitchEnv(gym.Env):
     """
     MLB 투구 시뮬레이션 Gym 환경 (DQN 학습용)

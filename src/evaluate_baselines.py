@@ -37,7 +37,7 @@ import matplotlib.pyplot as plt
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.model import TransitionProbabilityModel
-from src.pitch_env import PitchEnv
+from src.pitch_env import PitchEnv, get_valid_pitches
 from src.mdp_solver import MDPOptimizer
 from src.universal_model_trainer import PITCH_TYPE_MAP, _preprocess_raw
 
@@ -94,17 +94,21 @@ def _build_env():
         if col.startswith("zone_")
     })
 
+    # 군집 0 유효 구종 필터링 (Task 18)
+    valid_pitches_0 = get_valid_pitches(0, pitch_names)
+
     env = PitchEnv(
         transition_model=model,
-        pitch_names=pitch_names,
+        pitch_names=valid_pitches_0,
         zones=zones,
         pitcher_cluster=0,
     )
 
-    print(f"[env] pitch_names({len(pitch_names)})={pitch_names}")
+    print(f"[env] all pitch_names({len(pitch_names)})={pitch_names}")
+    print(f"[env] valid pitches cluster 0({len(valid_pitches_0)})={valid_pitches_0}")
     print(f"[env] zones({len(zones)})={zones}")
     print(f"[env] action_space={env.action_space.n}")
-    return env, pitch_names, zones, model
+    return env, pitch_names, valid_pitches_0, zones, model
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -280,10 +284,15 @@ class MDPPolicyAgent:
 MDP_POLICY_CACHE = os.path.join(_DATA_DIR, "mdp_optimal_policy.pkl")
 
 def solve_or_load_mdp_policy(model, pitch_names, zones,
-                             pitcher_clusters=("0", "1", "2", "3")) -> dict:
+                             pitcher_clusters=("0", "1", "2", "3"),
+                             valid_pitches_by_cluster=None) -> dict:
     """
     MDPOptimizer.solve_mdp()로 9216 상태 정책을 계산하고 pickle 캐시.
     재실행 시 캐시가 있으면 즉시 로드 (10~30분 학습 스킵).
+
+    valid_pitches_by_cluster가 지정되면 군집별 유효 구종만 탐색 (Task 18).
+    ⚠ 캐시 사용 시, 이전 캐시가 다른 action space로 생성되었을 수 있으므로
+       action space 변경 후에는 반드시 캐시 삭제 필요.
     """
     import pickle
 
@@ -305,6 +314,7 @@ def solve_or_load_mdp_policy(model, pitch_names, zones,
         pitch_names=pitch_names,
         zones=zones,
         pitcher_clusters=list(pitcher_clusters),
+        valid_pitches_by_cluster=valid_pitches_by_cluster,
     )
     optimizer.solve_mdp()
     policy = optimizer.optimal_policy
@@ -521,24 +531,28 @@ def run_per_cluster_evaluation(model, pitch_names, zones,
         print(f"  특성: {characteristics}")
         print(f"  투구 수: {len(df_c):,}건")
 
-        counts = _df_to_pitch_zone_counts(df_c, pitch_names, zones)
+        # 군집별 유효 구종 필터링 (Task 18)
+        valid_pitches = get_valid_pitches(int(cid), pitch_names)
+        print(f"  유효 구종: {valid_pitches} ({len(valid_pitches)}종)")
+
+        counts = _df_to_pitch_zone_counts(df_c, valid_pitches, zones)
         if counts is None or counts.empty:
             print(f"  유효 (pitch,zone) 조합 없음 → skip")
             continue
 
-        top_action = _counts_to_top_action(counts, pitch_names, zones)
-        probs      = _counts_to_action_probs(counts, pitch_names, zones)
+        top_action = _counts_to_top_action(counts, valid_pitches, zones)
+        probs      = _counts_to_action_probs(counts, valid_pitches, zones)
 
         n_zones_local = len(zones)
         top_pitch_idx = top_action // n_zones_local
         top_zone_idx  = top_action %  n_zones_local
-        top_label = f"{pitch_names[top_pitch_idx]} / Zone {zones[top_zone_idx]}"
+        top_label = f"{valid_pitches[top_pitch_idx]} / Zone {zones[top_zone_idx]}"
         print(f"  최빈 조합: {top_label}")
 
-        # 군집별 환경 생성 (동일 모델, pitcher_cluster만 변경)
+        # 군집별 환경 생성 (유효 구종만 사용)
         env = PitchEnv(
             transition_model=model,
-            pitch_names=pitch_names,
+            pitch_names=valid_pitches,
             zones=zones,
             pitcher_cluster=int(cid),
         )
@@ -549,10 +563,10 @@ def run_per_cluster_evaluation(model, pitch_names, zones,
             CategoricalAgent(name="Frequency", probs=probs),
         ]
         if mdp_policy is not None:
-            agents.append(MDPPolicyAgent(mdp_policy, pitch_names, zones))
+            agents.append(MDPPolicyAgent(mdp_policy, valid_pitches, zones))
 
         for agent in agents:
-            r = evaluate_agent(env, agent, N_EPISODES, SEED_BASE, pitch_names, zones)
+            r = evaluate_agent(env, agent, N_EPISODES, SEED_BASE, valid_pitches, zones)
             extra = ""
             if isinstance(agent, MDPPolicyAgent) and agent.miss_count > 0:
                 extra = f"  [policy miss={agent.miss_count}]"
@@ -596,7 +610,7 @@ def run_per_cluster_evaluation(model, pitch_names, zones,
     md.append("")
     md.append(f"- 환경: `PitchEnv(pitcher_cluster=K)` + 범용 전이 모델")
     md.append(f"- 평가: 각 (군집 × 에이전트) **{N_EPISODES}** 에피소드, 동일 seed")
-    md.append(f"- Action space: {len(pitch_names)} 구종 × {len(zones)} 존 = {len(pitch_names)*len(zones)}")
+    md.append(f"- Action space: 군집별 유효 구종 × {len(zones)} 존 (1% 미만 구종 제외)")
     md.append("")
     md.append("## 군집 정보")
     md.append("")
@@ -653,7 +667,7 @@ def main():
     print("SmartPitch Baseline Evaluation")
     print("=" * 60)
 
-    env, pitch_names, zones, model = _build_env()
+    env, all_pitch_names, pitch_names, zones, model = _build_env()
     n_actions = env.action_space.n
 
     # ── 데이터 수집 ──────────────────────────────────────────────────────────
@@ -735,11 +749,16 @@ def main():
     _save_plot(results, os.path.join(_DOCS_DIR, "baseline_comparison.png"))
 
     # ── MDP 최적 정책 (9216 상태) — pickle 캐시 사용 ─────────────────────────
-    mdp_policy = solve_or_load_mdp_policy(model, pitch_names, zones,
-                                          pitcher_clusters=("0", "1", "2", "3"))
+    # 군집별 유효 구종 딕셔너리 구성 (Task 18)
+    valid_pitches_by_cluster = {}
+    for cid in range(4):
+        valid_pitches_by_cluster[str(cid)] = get_valid_pitches(cid, all_pitch_names)
+    mdp_policy = solve_or_load_mdp_policy(model, all_pitch_names, zones,
+                                          pitcher_clusters=("0", "1", "2", "3"),
+                                          valid_pitches_by_cluster=valid_pitches_by_cluster)
 
     # ── Per-pitcher-cluster 평가 (MDPPolicy 포함) ────────────────────────────
-    run_per_cluster_evaluation(model, pitch_names, zones, league_raw, mdp_policy=mdp_policy)
+    run_per_cluster_evaluation(model, all_pitch_names, zones, league_raw, mdp_policy=mdp_policy)
 
     print("\n[done]")
 

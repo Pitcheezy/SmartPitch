@@ -42,7 +42,7 @@ import pandas as pd
 import numpy as np
 import wandb
 import itertools
-from typing import List, Dict, Tuple, Any
+from typing import List, Dict, Tuple, Any, Optional
 
 class MDPOptimizer:
     """
@@ -50,7 +50,7 @@ class MDPOptimizer:
     벨만 방정식(Value Iteration)을 거꾸로 계산하여 최적의 볼배합을 찾아내는 클래스 (RE24 기반)
     """
     
-    def __init__(self, transition_model, feature_columns: List[str], target_classes: List[str], pitch_names: List[str], zones: List[float], pitcher_clusters: List[str] = None):
+    def __init__(self, transition_model, feature_columns: List[str], target_classes: List[str], pitch_names: List[str], zones: List[float], pitcher_clusters: List[str] = None, valid_pitches_by_cluster: Dict[str, List[str]] = None):
         """
         초기화 메서드
         :param transition_model: 학습된 TransitionProbabilityModel 객체 (predict_proba 메서드 제공)
@@ -60,6 +60,8 @@ class MDPOptimizer:
         :param zones: 투구 코스(존) 리스트
         :param pitcher_clusters: 사용할 투수 군집 ID 문자열 리스트 (예: ["0","1","2"]).
                                   None이면 ["0"] (단일 투수 모드 — 상태 수 동일 유지)
+        :param valid_pitches_by_cluster: 군집별 유효 구종 딕셔너리 (예: {"0": ["Fastball","Slider",...], ...}).
+                                          None이면 모든 군집에서 pitch_names 전체 사용 (기존 동작)
         """
         self.transition_model = transition_model
         self.feature_columns = feature_columns
@@ -69,6 +71,10 @@ class MDPOptimizer:
         # 단일 투수 모드: pitcher_clusters=["0"] → 2,304개 상태 유지
         # 범용 모드: pitcher_clusters=["0","1",...,"K-1"] → 2,304×K 상태
         self.pitcher_clusters = pitcher_clusters if pitcher_clusters is not None else ["0"]
+
+        # 군집별 유효 구종 필터 (Task 18: 액션 스페이스 최적화)
+        # None이면 모든 군집에서 pitch_names 전체 사용 (기존 동작 호환)
+        self.valid_pitches_by_cluster = valid_pitches_by_cluster
         
         # 2019 MLB 평균 기대 득점(RE24) 매트릭스 (투수 목표: 이를 낮추는 것)
         # 키 형식: '아웃_주자' (예: '0_000', '2_111')
@@ -227,6 +233,11 @@ class MDPOptimizer:
         # 단일 투수 모드(K=1): 2,304개 / 범용 모드(K=6): 13,824개
         n_total = len(counts) * len(outs_list) * len(runners) * len(batter_clusters) * len(self.pitcher_clusters)
         print(f"총 상태 수: {n_total}개 (투수 군집 K={len(self.pitcher_clusters)})")
+        if self.valid_pitches_by_cluster:
+            for pc, vp in self.valid_pitches_by_cluster.items():
+                print(f"  cluster {pc}: {len(vp)}구종 × {len(self.zones)}존 = {len(vp)*len(self.zones)} actions — {vp}")
+        else:
+            print(f"  전체: {len(self.pitch_names)}구종 × {len(self.zones)}존 = {len(self.pitch_names)*len(self.zones)} actions")
         states = [
             f"{c}_{o}_{r}_{bc}_{pc}"
             for c, o, r, bc, pc in itertools.product(counts, outs_list, runners, batter_clusters, self.pitcher_clusters)
@@ -262,7 +273,13 @@ class MDPOptimizer:
                 cur_outs = int(cur_outs_str)
                 current_re24 = self._get_re24(cur_outs, cur_runners)
 
-                for pitch in self.pitch_names:
+                # 군집별 유효 구종 필터 적용 (Task 18)
+                if self.valid_pitches_by_cluster and cur_pitcher_cluster in self.valid_pitches_by_cluster:
+                    pitches_to_try = self.valid_pitches_by_cluster[cur_pitcher_cluster]
+                else:
+                    pitches_to_try = self.pitch_names
+
+                for pitch in pitches_to_try:
                     for zone in self.zones:
                         input_df = input_df_template.copy()
 

@@ -3,18 +3,18 @@
 - 환경: `PitchEnv(pitcher_cluster=0)` + 범용 전이 모델
   (`best_transition_model_universal.pth`, 4클래스: ball/foul/hit_into_play/strike)
 - 평가: 각 에이전트 **1000** 에피소드, 동일 seed (`0~999`)
-- Baseline action space: **117** = 9 구종 × 13 존
-  - 구종: Changeup, Curveball, Cutter, Fastball, Knuckleball, Sinker, Slider, Splitter, Sweeper
+- Baseline action space: **104** = 8 구종 × 13 존
+  - 구종: Changeup, Curveball, Cutter, Fastball, Sinker, Slider, Splitter, Sweeper
   - 존:   1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14
 
 ## Results
 
 | Agent | Mean Reward ± Std | Pitch Entropy | Mean Pitches/Ep | Action Space | Notes |
 |---|---|---|---|---|---|
-| Random | +0.204 ± 1.156 | 2.197 | 7.48 | 117 |  |
-| MostFrequent (Cole 2019) | +0.220 ± 1.177 | -0.000 | 8.48 | 117 |  |
-| Frequency (2023 League) | +0.181 ± 1.155 | 1.855 | 7.64 | 117 |  |
-| Frequency (Cole 2019) | +0.224 ± 1.137 | 1.243 | 7.78 | 117 |  |
+| Random | +0.185 ± 1.177 | 2.079 | 7.36 | 104 |  |
+| MostFrequent (Cole 2019) | +0.220 ± 1.177 | -0.000 | 8.48 | 104 |  |
+| Frequency (2023 League) | +0.148 ± 1.208 | 1.852 | 7.75 | 104 |  |
+| Frequency (Cole 2019) | +0.224 ± 1.137 | 1.243 | 7.78 | 104 |  |
 | DQN (Cole 2019 ref) | +0.436 ± 1.255 | — | — | ~52 (Cole 식별 4구종 × 13존) | W&B run h4n3o0di |
 
 ## 비고

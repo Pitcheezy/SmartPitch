@@ -57,32 +57,32 @@ CLUSTER_LABELS = {
 # Cluster 1~3: evaluate_baselines.py + train_dqn_all_clusters.py
 DATA = {
     0: {
-        "Random":       (0.204, 1.156),
+        "Random":       (0.185, 1.177),
         "MostFrequent": (0.220, 1.177),
         "Frequency":    (0.175, 1.123),
-        "MDP":          (0.250, 1.093),
+        "MDP":          (0.258, 1.091),
         "DQN":          (0.436, 1.255),
     },
     1: {
-        "Random":       (0.197, 1.162),
+        "Random":       (0.136, 1.201),
         "MostFrequent": (0.140, 1.188),
-        "Frequency":    (0.141, 1.175),
-        "MDP":          (0.230, 1.178),
-        "DQN":          (0.255, 1.154),
+        "Frequency":    (0.169, 1.174),
+        "MDP":          (0.247, 1.096),
+        "DQN":          (0.188, 1.127),
     },
     2: {
-        "Random":       (0.209, 1.190),
+        "Random":       (0.229, 1.130),
         "MostFrequent": (0.201, 1.123),
-        "Frequency":    (0.211, 1.101),
-        "MDP":          (0.260, 1.101),
-        "DQN":          (0.184, 1.214),
+        "Frequency":    (0.203, 1.111),
+        "MDP":          (0.262, 1.092),
+        "DQN":          (0.242, 1.130),
     },
     3: {
-        "Random":       (0.203, 1.145),
+        "Random":       (0.171, 1.194),
         "MostFrequent": (0.251, 1.128),
         "Frequency":    (0.202, 1.158),
-        "MDP":          (0.048, 1.439),
-        "DQN":          (0.242, 1.134),
+        "MDP":          (0.256, 1.072),
+        "DQN":          (0.215, 1.157),
     },
 }
 
@@ -164,7 +164,7 @@ def chart2_by_cluster():
 
     # 각주
     fig.text(0.5, -0.01,
-             "군집 0 DQN: Cole 2019 전용 ~52 action space / 군집 1~3 DQN: 범용 모델 117 action space",
+             "군집 0 DQN: Cole 2019 전용 ~52 actions / 군집 1: 91 actions (7구종) / 군집 2~3: 104 actions (8구종)",
              ha='center', fontsize=9, style='italic', color='#666')
 
     fig.tight_layout()
@@ -255,7 +255,7 @@ def chart3_summary_table():
                  fontsize=14, fontweight='bold', pad=18)
 
     fig.text(0.5, 0.06,
-             "군집 0 DQN: Cole 2019 전용 ~52 actions · 군집 1~3 DQN: 범용 모델 117 actions · 표준편차 생략",
+             "군집 0 DQN: Cole 2019 ~52 actions · 군집 1: 91 actions (7구종) · 군집 2~3: 104 actions (8구종) · 표준편차 생략",
              ha='center', fontsize=9, style='italic', color='#555')
 
     out = os.path.join(_DOCS, "presentation_summary_table.png")
