@@ -1,7 +1,7 @@
 # SmartPitch TODO — 작업 리스트
 
 코드를 직접 읽고 현재 상태를 확인한 후 작성했습니다.
-마지막 업데이트: 2026-04-13
+마지막 업데이트: 2026-04-25
 
 ---
 
@@ -41,6 +41,15 @@
   - Knuckleball 편중 0%로 완전 해소, 현실적 구종 분포 달성
   - 군집별 action space: 군집 0=104(8구종), 군집 1=91(7구종), 군집 2~3=104(8구종)
   - 결과: 군집 0 DQN 최고(+0.436), 군집 1~3 MDP 최고(+0.247/+0.262/+0.256)
+- [x] **Task 19** — Cease/Gallen 개인 맞춤 DQN 학습 + 베이스라인 평가 + 백엔드 통합 문서
+  - `scripts/main_cease.py`, `scripts/main_gallen.py`: 2024+2025 시즌 데이터로 개인 DQN 학습
+  - Cease: K=3 (FF/SL/CH), 5,400건, 39 actions, DQN +0.198 ± 1.177
+  - Gallen: K=4 (FF/SL/CH/CB), 4,572건, 52 actions, DQN +0.239 ± 1.134
+  - `scripts/evaluate_personal_dqn.py`: 5-agent 비교 + Welch t-test + Cohen's d
+  - 통계적 유의성: 모든 비교에서 p > 0.29, Cohen's d < 0.05 (negligible)
+  - `docs/personal_dqn_report.md`, `docs/baseline_cease.md`, `docs/baseline_gallen.md`
+  - `docs/re24_decision.md`: RE24 2019→2024 분석, 현행 유지 결정
+  - `docs/MODEL_USAGE.md`: 백엔드 통합 가이드 (11섹션)
 
 ---
 

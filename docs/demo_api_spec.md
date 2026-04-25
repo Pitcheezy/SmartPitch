@@ -105,11 +105,11 @@ action_index = pitch_index × n_zones + zone_index
 
 ### 2.2 시즌별 투구 수
 
-| 투수 | 2019 | 2023 | 2024 | 합계 (학습 대상) |
+| 투수 | 2019 | 2024 | 2025 | 합계 (학습 대상) |
 |------|------|------|------|-----------------|
 | Gerrit Cole | **3,362** | — | — | 3,362 (2019) |
-| Dylan Cease | — | **3,268** | **3,263** | 6,531 (2023+2024) |
-| Zac Gallen | — | **3,252** | **2,588** | 5,840 (2023+2024) |
+| Dylan Cease | — | **3,308** | **2,104** | 5,400 (2024+2025) |
+| Zac Gallen | — | **2,507** | **2,068** | 4,572 (2024+2025) |
 
 ### 2.3 구종별 비율 (Statcast pitch_type 기준)
 
@@ -123,63 +123,70 @@ action_index = pitch_index × n_zones + zone_index
 | CH (Changeup) | 7.4% | Changeup |
 | SI (Sinker) | 2.4% | (군집화 시 Fastball에 흡수 가능) |
 
-#### Dylan Cease (2023)
-
-| pitch_type | 비율 | 구종명 |
-|-----------|------|--------|
-| FF (4-Seam Fastball) | 43.2% | Fastball |
-| SL (Slider) | 38.6% | Slider |
-| KC (Knuckle Curve) | 15.2% | Curveball |
-| CH (Changeup) | 3.0% | Changeup |
-
 #### Dylan Cease (2024)
 
 | pitch_type | 비율 | 구종명 |
 |-----------|------|--------|
 | FF (4-Seam Fastball) | 43.4% | Fastball |
-| SL (Slider) | 42.7% | Slider |
-| KC (Knuckle Curve) | 8.1% | Curveball |
-| ST (Sweeper) | 4.2% | Sweeper |
-| CH (Changeup) | 0.9% | (1% 미만, 제외 가능) |
-| FC (Cutter) | 0.6% | (1% 미만, 제외) |
+| SL (Slider) | 43.0% | Slider |
+| KC (Knuckle Curve) | 7.7% | Curveball |
+| ST (Sweeper) | 4.4% | Sweeper |
+| CH (Changeup) | 0.8% | (1% 미만) |
+| FC (Cutter) | 0.6% | (1% 미만) |
+| SI (Sinker) | 0.1% | (1% 미만) |
 
-#### Zac Gallen (2023)
+#### Dylan Cease (2025)
 
 | pitch_type | 비율 | 구종명 |
 |-----------|------|--------|
-| FF (4-Seam Fastball) | 49.7% | Fastball |
-| KC (Knuckle Curve) | 22.7% | Curveball |
-| CH (Changeup) | 13.9% | Changeup |
-| FC (Cutter) | 9.6% | Cutter |
-| SL (Slider) | 4.0% | Slider |
+| SL (Slider) | 45.3% | Slider |
+| FF (4-Seam Fastball) | 42.2% | Fastball |
+| KC (Knuckle Curve) | 7.3% | Curveball |
+| SI (Sinker) | 1.9% | Sinker |
+| CH (Changeup) | 1.7% | Changeup |
+| ST (Sweeper) | 1.6% | Sweeper |
+
+> 2024 vs 2025 구종 분포 급변 없음 (모든 구종 ±10pp 이내)
 
 #### Zac Gallen (2024)
 
 | pitch_type | 비율 | 구종명 |
 |-----------|------|--------|
-| FF (4-Seam Fastball) | 46.0% | Fastball |
-| KC (Knuckle Curve) | 27.5% | Curveball |
-| CH (Changeup) | 13.9% | Changeup |
-| SL (Slider) | 8.2% | Slider |
-| FC (Cutter) | 4.1% | Cutter |
+| FF (4-Seam Fastball) | 46.3% | Fastball |
+| KC (Knuckle Curve) | 27.7% | Curveball |
+| CH (Changeup) | 14.0% | Changeup |
+| SL (Slider) | 7.9% | Slider |
+| FC (Cutter) | 3.9% | Cutter |
+| SI (Sinker) | 0.2% | (1% 미만) |
+
+#### Zac Gallen (2025)
+
+| pitch_type | 비율 | 구종명 |
+|-----------|------|--------|
+| FF (4-Seam Fastball) | 46.7% | Fastball |
+| KC (Knuckle Curve) | 24.6% | Curveball |
+| CH (Changeup) | 14.0% | Changeup |
+| SL (Slider) | 13.3% | Slider |
+| SI (Sinker) | 1.2% | Sinker |
+| FC (Cutter) | 0.1% | (1% 미만) |
+
+> 2024 vs 2025 구종 분포 급변 없음 (모든 구종 ±10pp 이내)
 
 ---
 
-## 3. 각 투수 구종 목록 (예상 Action Space)
+## 3. 각 투수 구종 목록 (실제 학습 결과)
 
-`clustering.py`가 UMAP+KMeans로 구종을 자동 식별하므로
-실제 결과는 학습 시 결정됩니다. 아래는 Statcast 분포 기반 예상입니다.
+`clustering.py`가 UMAP+KMeans로 구종을 자동 식별합니다.
+아래는 실제 학습 시 결정된 결과입니다.
 
-| 투수 | 시즌 | 예상 구종 (K) | Action Space | 비고 |
-|------|------|-------------|-------------|------|
-| **Cole** | 2019 | Fastball, Slider, Curveball, Changeup (4) | 4 × 13 = **52** | 기존 학습 완료 |
-| **Cease** | 2023 | Fastball, Slider, Curveball, Changeup (4) | 4 × 13 = **52** | CH 3%로 3구종 가능 |
-| **Cease** | 2024 | Fastball, Slider, Curveball, Sweeper (4) | 4 × 13 = **52** | CH/FC 1% 미만 제외 |
-| **Gallen** | 2023 | Fastball, Curveball, Changeup, Cutter, Slider (5) | 5 × 13 = **65** | SL 4%로 4구종 가능 |
-| **Gallen** | 2024 | Fastball, Curveball, Changeup, Slider, Cutter (5) | 5 × 13 = **65** | 5구종 모두 4%+ |
+| 투수 | 시즌 | 구종 (K) | Action Space | 실루엣 점수 |
+|------|------|----------|-------------|------------|
+| **Cole** | 2019 | Fastball, Slider, Curveball, Changeup (4) | 4 × 13 = **52** | 학습 완료 |
+| **Cease** | 2024+2025 | Fastball (97mph), Slider, Changeup (3) | 3 × 13 = **39** | 0.8216 |
+| **Gallen** | 2024+2025 | Fastball (93.5mph), Slider (88.2), Changeup (86.7), Curveball (81.0) (4) | 4 × 13 = **52** | 0.7851 |
 
-> **주의**: 구종 수(K)는 `clustering.py`가 실루엣 점수 기반으로 K=3~6 중 자동 선택합니다.
-> 위 표는 예상치이며, 실제 학습 시 달라질 수 있습니다.
+> **Cease**: 3구종만 식별됨 — 슬라이더/스위퍼/커브가 하나의 "Slider" 군집으로 통합.
+> **Gallen**: 4구종 식별 — FF/SL/CH/KC가 명확히 분리됨.
 
 ---
 
@@ -246,73 +253,76 @@ POST /api/recommend
   ],
   "context": {
     "model_type": "DQN",
-    "training_data": "Dylan Cease 2023 (3,268 pitches)",
-    "action_space": 52
+    "training_data": "Dylan Cease 2024+2025 (5,400 pitches)",
+    "action_space": 39
   }
 }
 ```
 
-### 4.4 투수별 Mock 응답 예시
+### 4.4 투수별 실제 DQN 추천 예시
 
-#### 상황: 1-2 카운트, 1아웃, 주자 1루
+아래는 **실제 학습된 DQN 모델**의 정책 출력입니다.
 
-**Cole 추천:**
-```json
-{ "pitch_name": "Slider", "zone": 14, "zone_description": "하우 바깥 (Down & Away) 체이스" }
-```
-> 1-2 카운트에서 슬라이더를 낮고 바깥(zone 14)으로 빠지게 던져 헛스윙 유도 — Cole의 대표 결정구 패턴.
+#### 상황: 0아웃 주자 없음 — 볼카운트별 추천
 
-**Cease 추천:**
-```json
-{ "pitch_name": "Slider", "zone": 14, "zone_description": "하우 바깥 (Down & Away) 체이스" }
-```
-> 쫓는 카운트(0-2)에서 슬라이더를 낮은 바깥(zone 14)으로 빠뜨려 체이스 유도. Cease의 슬라이더(38.6%)는 주력 결정구.
+**Cease DQN (평균 보상: +0.280 ± 1.125):**
+| 카운트 | 추천 구종 | 추천 존 | 설명 |
+|--------|----------|--------|------|
+| 0-0 | Fastball | Zone 11 | 높고 몸쪽 (Up & In) |
+| 0-2 | Changeup | Zone 2 | 스트라이크존 중상 |
+| 1-2 | Changeup | Zone 2 | 스트라이크존 중상 |
+| 3-2 | Fastball | Zone 11 | 높고 몸쪽 (Up & In) |
 
-**Gallen 추천:**
-```json
-{ "pitch_name": "Curveball", "zone": 13, "zone_description": "하좌 바깥 (Down & In) 체이스" }
-```
-> Gallen의 너클커브(22.7%)는 수직 낙차가 큰 구종. 낮은 존(zone 13)으로 떨어뜨려 타자의 스윙을 유도하는 전략.
+> Cease DQN은 패스트볼 비중 82.6%로 압도적. 2스트라이크 후 체인지업 전환 패턴.
+> 구종 분포: Fastball 82.6%, Changeup 10.2%, Slider 7.1%
 
-> **주의**: 위 Mock 데이터는 예상 응답이며, 실제 DQN 학습 후 결과와 다를 수 있습니다.
-> 같은 상황이라도 `batter_cluster`에 따라 추천이 달라집니다.
+**Gallen DQN (평균 보상: +0.266 ± 1.115):**
+| 카운트 | 추천 구종 | 추천 존 | 설명 |
+|--------|----------|--------|------|
+| 0-0 | Curveball | Zone 1 | 스트라이크존 좌상 |
+| 0-2 | Curveball | Zone 1 | 스트라이크존 좌상 |
+| 1-1 | Changeup | Zone 7 | 스트라이크존 좌하 |
+| 3-2 | Changeup | Zone 7 | 스트라이크존 좌하 |
+
+> Gallen DQN은 4구종 고루 사용. 커브볼로 리드 + 체인지업으로 마무리하는 패턴.
+> 구종 분포: Fastball 35.3%, Curveball 33.6%, Slider 18.3%, Changeup 12.8%
+
+> **참고**: 같은 상황이라도 `batter_cluster`에 따라 추천이 달라집니다.
+> 위 예시는 랜덤 타자 군집 기준입니다.
 
 ---
 
 ## 5. 학습 데이터 요구사항
 
-### 5.1 기준: Cole 2019
+### 5.1 학습 결과 비교
 
-| 항목 | 값 |
-|------|-----|
-| 투구 수 | 3,362 |
-| 시즌 | 1 시즌 (2019) |
-| DQN 학습 스텝 | 300,000 |
-| 학습 시간 | ~10~15분 (CPU) |
-| 평가 결과 | +0.436 ± 1.255 |
+| 항목 | Cole (2019) | Cease (2024+2025) | Gallen (2024+2025) |
+|------|------------|------------------|-------------------|
+| 투구 수 | 3,362 | 5,400 | 4,572 |
+| 시즌 | 1 시즌 | 2 시즌 | 2 시즌 |
+| 식별 구종 (K) | 4 | 3 | 4 |
+| Action Space | 52 | 39 | 52 |
+| DQN 학습 스텝 | 300,000 | 300,000 | 300,000 |
+| **평균 보상** | **+0.436 ± 1.255** | **+0.280 ± 1.125** | **+0.266 ± 1.115** |
+| 주력 구종 | Fastball 51.3% | Fastball 82.6% | Fastball 35.3% |
 
-### 5.2 Cease / Gallen 데이터 충분성
+### 5.2 데이터 충분성
 
 | 투수 | 사용 시즌 | 투구 수 | Cole 대비 | 판정 |
 |------|----------|---------|----------|------|
-| Cease | 2023 단독 | 3,268 | 97% | **충분** |
-| Cease | 2023+2024 | 6,531 | 194% | **충분** (구종 변화 주의) |
-| Gallen | 2023 단독 | 3,252 | 97% | **충분** |
-| Gallen | 2023+2024 | 5,840 | 174% | **충분** |
+| Cease | 2024+2025 | 5,400 | 161% | **충분** |
+| Gallen | 2024+2025 | 4,572 | 136% | **충분** |
+
+> 2시즌 결합 시 구종 분포 급변 없음 확인 (모든 구종 ±10pp 이내).
 
 ### 5.3 권장 사항
 
-1. **단일 시즌 사용 권장**: 2023 또는 2024 중 택 1
-   - Cease 2024: 슬라이더 비중이 급증(38.6% → 42.7%), 커브 비중 반감(15.2% → 8.1%)
-   - 시즌 간 구종 믹스가 크게 다르면 `clustering.py`가 다른 K를 선택할 수 있음
-   - 2시즌 합치면 구종 경계가 불명확해질 위험
-
-2. **최소 투구 수 기준**: 약 **2,000건 이상**이면 학습 가능
-   - DQN은 MLP 시뮬레이터 위에서 학습하므로 투구 데이터는 MLP 학습에만 사용
-   - 범용 모델(`USE_UNIVERSAL_MODEL=True`) 사용 시 개인 데이터는 구종 식별에만 필요
+1. **최소 투구 수 기준**: 약 **2,000건 이상**이면 학습 가능
+   - DQN은 MLP 시뮬레이터 위에서 학습하므로 투구 데이터는 구종 식별에만 사용
+   - 범용 모델 사용 시 개인 데이터는 구종 식별에만 필요
    - 범용 모델 사용이면 **수백 건만으로도 구종 식별 가능** (군집화만 하면 됨)
 
-3. **범용 모델 vs 개인 모델**:
+2. **범용 모델 vs 개인 모델**:
 
    | 방식 | 개인 데이터 용도 | MLP 학습 | 필요 투구 수 |
    |------|----------------|---------|-------------|
@@ -324,18 +334,21 @@ POST /api/recommend
 ## 6. 학습 실행 방법 (참고)
 
 ```bash
-# Cease 2023 학습
-uv run src/main.py
-# 프롬프트: Dylan Cease / 2023-03-30 / 2023-10-01
+# Cease 2024+2025 학습
+uv run scripts/main_cease.py
 
-# Gallen 2023 학습
-uv run src/main.py
-# 프롬프트: Zac Gallen / 2023-03-30 / 2023-10-01
+# Gallen 2024+2025 학습
+uv run scripts/main_gallen.py
 ```
 
 학습 완료 후 산출물:
-- `smartpitch_dqn_final.zip` → 투수별로 이름 변경 필요 (예: `dqn_cease_2023.zip`)
+- `dqn_cease_2024_2025.zip` — Cease DQN 모델
+- `dqn_gallen_2024_2025.zip` — Gallen DQN 모델
+- `best_dqn_model_cease/best_model.zip` — EvalCallback 기준 최고 모델
+- `best_dqn_model_gallen/best_model.zip` — EvalCallback 기준 최고 모델
 - W&B에 학습 곡선, 구종 분포, 정책 테이블 자동 로깅
+  - Cease: `Dylan_Cease_Pipeline` (run `lytwhlai`)
+  - Gallen: `Zac_Gallen_Pipeline` (run `6xmr9b50`)
 
 ---
 

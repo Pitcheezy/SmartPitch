@@ -56,7 +56,10 @@ SmartPitch/
 │   ├── generate_pitch_location_heatmaps.py      투구 위치 히트맵
 │   ├── single_pitcher_zone_breakdown.py         단일 투수 zone 분포 분석
 │   ├── generate_physical_lookup.py              물리 피처 lookup CSV 생성 (Task 12 Phase 2)
-│   └── train_dqn_all_clusters.py               군집별 DQN 학습 + 평가 (Task 17)
+│   ├── train_dqn_all_clusters.py               군집별 DQN 학습 + 평가 (Task 17)
+│   ├── main_cease.py                           Cease 개인 DQN 학습 (2024+2025, Task 19)
+│   ├── main_gallen.py                          Gallen 개인 DQN 학습 (2024+2025, Task 19)
+│   └── evaluate_personal_dqn.py                개인 DQN 5-agent 비교 + 통계 분석 (Task 19)
 │
 ├── data/                            git에서 추적 안 함 (*.csv, *.json, *.pkl은 .gitignore)
 │   ├── batter_clusters_2023.csv         타자 군집 매핑 (batter_clustering.py가 생성)
@@ -70,12 +73,20 @@ SmartPitch/
 ├── docs/
 │   ├── baseline_comparison.md           Cole 2019 5-agent 비교 결과
 │   ├── baseline_by_cluster.md           투수 군집별(K=4) 5-agent 비교 결과
+│   ├── baseline_cease.md                Cease 개인 DQN 5-agent 비교 (Task 19)
+│   ├── baseline_gallen.md               Gallen 개인 DQN 5-agent 비교 (Task 19)
+│   ├── personal_dqn_report.md           3투수 종합 보고서 + 통계적 유의성 (Task 19)
+│   ├── MODEL_USAGE.md                   백엔드 통합 가이드 (11섹션, Task 19)
+│   ├── demo_api_spec.md                 데모 API 스펙 + 실제 학습 결과
+│   ├── re24_decision.md                 RE24 2019→2024 분석, 현행 유지 결정
 │   ├── mdp_vs_env_reward_analysis.md    MDP vs PitchEnv 줄 단위 분석 + VI 수렴/정책/trace
 │   ├── experiment_comparison.md         범용 MLP Exp1~5 비교
 │   └── work_log_20260329_30.md          작업 로그 (학습용)
 │
 ├── best_transition_model_universal.pth  범용 MLP 가중치 (gitignored *.pth)
-├── smartpitch_dqn_final.zip             최종 DQN 모델 (gitignored *.zip)
+├── smartpitch_dqn_final.zip             Cole DQN 모델 (gitignored *.zip)
+├── dqn_cease_2024_2025.zip              Cease DQN 모델 (gitignored *.zip, Task 19)
+├── dqn_gallen_2024_2025.zip             Gallen DQN 모델 (gitignored *.zip, Task 19)
 │
 ├── pyproject.toml               의존성 정의
 ├── uv.lock                      버전 잠금 파일 (팀 동기화 기준)
@@ -313,6 +324,11 @@ Cluster 2: +0.242 ± 1.130  (Fastball 56%, Sinker 12%, Slider 10%) — 104 actio
 Cluster 3: +0.215 ± 1.157  (Fastball 45%, Splitter 13%, Curveball 12%) — 104 actions (8구종)
 ※ Knuckleball 편중 0%로 완전 해소
 
+[DQN — 개인 맞춤 모델 (Task 19: 2024+2025 시즌, 300K timesteps, 1000 ep 평가)]
+Cease:  +0.198 ± 1.177  (Fastball 83.3%, Changeup 9.2%, Slider 7.6%) — 39 actions (3구종)
+Gallen: +0.239 ± 1.134  (Fastball 35.7%, Curveball 33.9%, Slider 17.4%, Changeup 13.0%) — 52 actions (4구종)
+※ 통계적 유의성: 모든 베이스라인 대비 p > 0.29, Cohen's d < 0.05 (negligible)
+
 [베이스라인 비교 — evaluate_baselines.py, 1000 ep, Task 18 action space 최적화 후]
 군집 0: DQN +0.436 > MDP +0.258 > MostFreq +0.220 > Random +0.185 > Freq +0.175 (DQN 최고)
 군집 1: MDP +0.247 > DQN +0.188 > Freq +0.169 > MostFreq +0.140 > Random +0.136 (MDP 최고)
@@ -358,15 +374,23 @@ Cluster 3: +0.215 ± 1.157  (Fastball 45%, Splitter 13%, Curveball 12%) — 104 
   - 군집별 action space: 군집 0=104(8구종), 군집 1=91(7구종), 군집 2~3=104(8구종)
   - MDP 전 군집 재계산 (VI 18회 수렴), DQN 군집 1~3 재학습
   - 결과: 군집 0에서는 DQN 최고(+0.436), 군집 1~3에서는 MDP 최고
+- [x] Task 19: Cease/Gallen 개인 맞춤 DQN 학습 + 베이스라인 평가 + 백엔드 통합 문서
+  - scripts/main_cease.py, scripts/main_gallen.py: 2024+2025 시즌 데이터로 개인 DQN 학습
+  - Cease: K=3 (FF/SL/CH), 5,400건, DQN +0.198 ± 1.177
+  - Gallen: K=4 (FF/SL/CH/CB), 4,572건, DQN +0.239 ± 1.134
+  - scripts/evaluate_personal_dqn.py: 5-agent 비교 + Welch t-test + Cohen's d
+  - 통계적 유의성: 모든 비교에서 p > 0.29, Cohen's d < 0.05 (negligible)
+  - docs/personal_dqn_report.md, docs/MODEL_USAGE.md, docs/re24_decision.md
 
 ### 다음 우선순위
 1. ~~**[High]** 물리 피처 Phase 2~~ (완료)
 2. ~~**[High]** MDP solve_mdp 수렴 개선~~ (완료)
 3. ~~**[Medium]** 군집 1~3 DQN 학습~~ (완료)
 4. ~~**[High]** Action Space 최적화~~ (완료 — Knuckleball 편중 해소)
-5. **[High]** RE24 매트릭스 연도별 갱신 (현재 2019 하드코딩, pitch_env.py + mdp_solver.py 두 곳)
-6. **[Medium]** 인플레이 타구 확률 실데이터 기반 교체 (현재 70/15/10/5% 하드코딩)
-7. **[Low]** FastAPI 실시간 추천 API
+5. ~~**[High]** Cease/Gallen 개인 DQN + 평가 + 문서화~~ (완료)
+6. **[High]** RE24 매트릭스 연도별 갱신 (현재 2019 하드코딩, pitch_env.py + mdp_solver.py 두 곳)
+7. **[Medium]** 인플레이 타구 확률 실데이터 기반 교체 (현재 70/15/10/5% 하드코딩)
+8. **[Low]** FastAPI 실시간 추천 API
 
 ---
 

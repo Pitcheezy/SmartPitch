@@ -136,6 +136,11 @@ Cluster 3: +0.215 ± 1.157  (Fastball 45%, Splitter 13%, Curveball 12%) — 104 
 군집 1: MDP +0.247 > DQN +0.188 > Freq +0.169 > MostFreq +0.140 > Random +0.136 (MDP 최고)
 군집 2: MDP +0.262 > DQN +0.242 > Random +0.229 > Freq +0.203 > MostFreq +0.201 (MDP 최고)
 군집 3: MDP +0.256 > MostFreq +0.251 > DQN +0.215 > Freq +0.202 > Random +0.171 (MDP 최고)
+
+[개인 맞춤 DQN — 2024+2025 시즌, 동일 action space에서 5-agent 비교, 1000 ep]
+Cease (39 actions, K=3): MDP +0.251 > Freq +0.233 > MostFreq +0.220 > DQN +0.198 > Random +0.196
+Gallen (52 actions, K=4): DQN +0.239 ≈ MDP +0.236 > Random +0.224 > MostFreq +0.220 > Freq +0.204
+통계적 유의성: 모든 비교에서 p > 0.29, Cohen's d < 0.05 (negligible)
 ```
 
 ---
@@ -152,6 +157,17 @@ MDP 성능 +0.151 → +0.247 (+63%), Knuckleball 편중 해소(entropy 0→1.3),
 - γ=1.0 → γ=0.99로 foul self-loop 무한 누적 방지
 - 효과: cluster 0 MDP +0.247 → +0.250 (미미한 개선, 안정성 확보)
 - 군집 3 부진(+0.048)은 VI 미수렴이 아닌 MLP calibration 문제로 확인
+
+### ~~[Task 19] Cease/Gallen 개인 맞춤 DQN 학습 + 평가~~ (완료)
+- [x] `scripts/main_cease.py`, `scripts/main_gallen.py`: 2024+2025 시즌 데이터로 개인 DQN 학습
+- [x] Cease: 5,400 투구, K=3 (FF/SL/CH), 39 actions, DQN +0.198 ± 1.177
+- [x] Gallen: 4,572 투구, K=4 (FF/SL/CH/CB), 52 actions, DQN +0.239 ± 1.134
+- [x] `scripts/evaluate_personal_dqn.py`: 5-agent 비교 + Welch t-test + Cohen's d
+- [x] 통계 결과: 모든 비교에서 p > 0.29, Cohen's d < 0.05 (negligible)
+  → DQN과 베이스라인 간 유의미한 차이 없음 (야구의 본질적 변동성 σ ≈ 1.15)
+- [x] `docs/MODEL_USAGE.md`: 백엔드 통합 가이드 (모델 로드, 추론, Action 변환)
+- [x] 산출물: `docs/baseline_cease.md`, `docs/baseline_gallen.md`, `docs/personal_dqn_report.md`, `docs/re24_decision.md`
+- [x] 모델 파일: `dqn_cease_2024_2025.zip`, `dqn_gallen_2024_2025.zip`
 
 ### [우선순위 3] 범용 모델 구종 군집화 통합 (Task 10)
 학습-추론 구종 분류 불일치 문제 (학습: Statcast pitch_type, 추론: 물리 군집).
