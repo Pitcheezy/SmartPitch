@@ -356,7 +356,7 @@ Gallen: +0.279 ± 1.138  (Fastball 35.7%, Curveball 33.9%, Slider 17.4%, Changeu
 군집 0: MDP +0.300 > MostFreq +0.275 > Freq +0.241 > Random +0.199 (MDP 최고)
 군집 1: MDP +0.292 > Freq +0.222 > Random +0.189 > MostFreq +0.162 (MDP 최고)
 군집 2: MDP +0.282 > Freq +0.231 > MostFreq +0.225 > Random +0.207 (MDP 최고)
-군집 3: MDP +0.282 > MostFreq +0.288 > Freq +0.242 > Random +0.199 (MDP 최고)
+군집 3: MostFreq +0.288 > MDP +0.282 > Freq +0.242 > Random +0.199 (MostFreq 근소 우위, Δ=0.006)
 ※ BIP 실데이터(Task 21) 반영: 1루타 비율 대폭 증가(15%→21.7%)로 전반적 보상 하락, 순위 보존
 ```
 
