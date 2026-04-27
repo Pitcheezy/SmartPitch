@@ -44,7 +44,7 @@ def load_env_and_model():
                           if c.startswith("mapped_pitch_name_")})
     zones = sorted({int(c[len("zone_"):]) for c in model.feature_columns
                     if c.startswith("zone_")})
-    env = PitchEnv(model, pitch_names, zones, pitcher_cluster=0)
+    env = PitchEnv(model, pitch_names, zones, pitcher_cluster=0, season=2024)
     return model, env, pitch_names, zones
 
 
@@ -58,6 +58,7 @@ def measure_convergence(model, pitch_names, zones, n_iters=10):
         pitch_names=pitch_names,
         zones=zones,
         pitcher_clusters=["0"],
+        season=2024,
     )
     counts = ["3-2", "2-2", "3-1", "1-2", "2-1", "3-0", "0-2", "1-1", "2-0", "0-1", "1-0", "0-0"]
     outs_list = ["2", "1", "0"]

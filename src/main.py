@@ -197,6 +197,7 @@ def main(player_first_name, player_last_name, start_date, end_date):
             pitch_names=identified_pitch_names,
             zones=strike_zones,
             pitcher_clusters=pitcher_clusters_for_mdp,
+            season=2024,
         )
 
         # 가치 반복 계산 및 W&B Table에 결과 로깅
@@ -214,12 +215,14 @@ def main(player_first_name, player_last_name, start_date, end_date):
             pitch_names=identified_pitch_names,
             zones=strike_zones,
             pitcher_cluster=int(pitcher_cluster_id),
+            season=2024,
         )
         eval_env = PitchEnv(
             transition_model=model_module,
             pitch_names=identified_pitch_names,
             zones=strike_zones,
             pitcher_cluster=int(pitcher_cluster_id),
+            season=2024,
         )
 
         dqn_config = wandb.config

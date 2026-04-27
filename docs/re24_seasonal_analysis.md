@@ -49,11 +49,21 @@
 
 ## 3. 데이터 출처
 
-| 시즌 | 출처 | 비고 |
-|------|------|------|
-| 2019 | Pitcher List / Tango | 2016-2019+2021 집계. 정확한 2019 단일 시즌 3자리 정밀도 미확보 |
-| 2023 | FanGraphs "Run Expectancy Matrix Reloaded for the 2020s" | 2023 단일 시즌, 소수점 2자리 반올림 |
-| 2024 | FanGraphs 동일 시리즈 | 2024 단일 시즌, 소수점 2자리 반올림 |
+현재 `data/re24_*.json`은 **외부 공개 표를 수동 입력**하여 생성했다.
+pybaseball Statcast play-by-play로부터 직접 계산하는 재현 스크립트(`scripts/compute_re24_per_season.py`)도
+제공되며, 외부 표 값과 교차 검증하는 용도로 사용할 수 있다.
+
+| 시즌 | 출처 | 입력 방식 | 비고 |
+|------|------|-----------|------|
+| 2019 | Tom Tango RE24 (Pitcher List 집계) | 수동 입력 | 2016-2019+2021 aggregate. 정확한 2019 단일 시즌 3자리 정밀도 미확보. Tango의 원본 표에서 발췌 |
+| 2023 | FanGraphs "Run Expectancy Matrix Reloaded for the 2020s" (2023편) | 수동 입력 | 2023 단일 시즌, 소수점 2자리 반올림. FanGraphs 블로그 기사에서 발췌 |
+| 2024 | FanGraphs 동일 시리즈 (2024편) | 수동 입력 | 2024 단일 시즌, 소수점 2자리 반올림. FanGraphs 블로그 기사에서 발췌 |
+
+> **재현 방법**: `uv run scripts/compute_re24_per_season.py --season 2024`로 Statcast에서 직접 계산 가능.
+> 외부 표와 ±0.02 이내로 일치하면 정상. 차이가 나는 이유: 집계 기간·이벤트 필터·반올림 차이.
+>
+> **인용**: 발표·논문에서 RE24를 언급할 때는 시즌별 출처를 구분하여 기재할 것.
+> 예) "2024 RE24: FanGraphs (2024 single-season), 2019: Tango/Pitcher List (2016-2021 aggregate)"
 
 ## 4. 기술 구현
 

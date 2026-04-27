@@ -60,9 +60,10 @@ SmartPitch/
 │   ├── train_dqn_all_clusters.py               군집별 DQN 학습 + 평가 (Task 17)
 │   ├── main_cease.py                           Cease 개인 DQN 학습 (2024+2025, Task 19)
 │   ├── main_gallen.py                          Gallen 개인 DQN 학습 (2024+2025, Task 19)
-│   └── evaluate_personal_dqn.py                개인 DQN 5-agent 비교 + 통계 분석 (Task 19)
+│   ├── evaluate_personal_dqn.py                개인 DQN 5-agent 비교 + 통계 분석 (Task 19)
+│   └── compute_re24_per_season.py              RE24 매트릭스 Statcast 직접 계산 (Task 20 재현용)
 │
-├── data/                            git에서 추적 안 함 (*.csv, *.json, *.pkl은 .gitignore)
+├── data/                            대부분 gitignored (예외: re24_*.json은 git tracked)
 │   ├── batter_clusters_2023.csv         타자 군집 매핑 (batter_clustering.py가 생성)
 │   ├── pitcher_clusters_2023.csv        투수 군집 매핑 (pitcher_clustering.py가 생성)
 │   ├── re24_2019.json                   RE24 매트릭스 2019 (2016-2019+2021 aggregate, git tracked)
@@ -414,8 +415,8 @@ Gallen: +0.239 ± 1.134  (Fastball 35.7%, Curveball 33.9%, Slider 17.4%, Changeu
 8. **[High]** 인플레이 확률 실데이터 교체 (Task 21)
 9. **[High]** MLP 3시즌 데이터 확장 (Task 23) + Calibration 개선 (Task 24)
 10. **[Medium]** 구종 분류 통합 (Task 26) + 투수 군집 K 재검토 (Task 27)
-9. **[Medium]** DQN 학습 스텝 증가 (Task 28) + 탐색 전략 개선 (Task 29)
-10. **[Low]** 추가 투수 학습 (Task 31) + 좌/우 분리 (Task 32) + FastAPI API
+11. **[Medium]** DQN 학습 스텝 증가 (Task 28) + 탐색 전략 개선 (Task 29)
+12. **[Low]** 추가 투수 학습 (Task 31) + 좌/우 분리 (Task 32) + FastAPI API
 
 ---
 
