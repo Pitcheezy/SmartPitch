@@ -53,7 +53,65 @@
 
 ---
 
-## 우선순위 판단 기준
+## 다음 작업 목록 (발표 후 로드맵)
+
+> 상세: [docs/improvement_roadmap.md](../docs/improvement_roadmap.md)
+> 진단: [docs/system_diagnosis.md](../docs/system_diagnosis.md)
+> 평가 체계: [docs/evaluation_framework.md](../docs/evaluation_framework.md)
+
+### 우선순위 1: 데이터 정확도 개선 (Week 1)
+
+- [ ] **Task 20** — RE24 매트릭스 2024 갱신 (0.5일, 의존성 없음)
+  - `pitch_env.py` + `mdp_solver.py` 동시 수정
+  - 2024 MLB RE24 값으로 교체 (약 6% 낮은 득점 환경)
+- [ ] **Task 21** — 인플레이 타구 확률 실데이터 교체 (0.5일, 의존성 없음)
+  - 현재 70/15/10/5% -> 2023 Statcast BIP 집계 기반
+  - `pitch_env.py` + `mdp_solver.py` 동시 수정
+- [ ] **Task 22** — 군집별 인플레이 확률 세분화 (1일, Task 21 후)
+  - (batter_cluster, pitcher_cluster)별 BIP 확률 테이블
+
+### 우선순위 2: MLP 정확도 향상 (Week 2~3)
+
+- [ ] **Task 23** — MLP 3시즌 데이터 확장 (2일, 의존성 없음)
+  - 2023+2024+2025 = ~200만 건으로 확장
+  - 예상: val_acc 57.5% -> 61~63%
+- [ ] **Task 24** — Calibration 개선 (1~3일, Task 23 후)
+  - A: Temperature Scaling (0.5일, 권장)
+  - B: Focal Loss (1일)
+  - C: 희귀 구종 Oversampling (1일)
+- [ ] **Task 25** — 추가 피처 도입 (2일, Task 23 후)
+  - release_pos_x/z, spin_rate, spin_axis
+  - 예상: val_acc 추가 +1~2pp
+
+### 우선순위 3: 군집화 통합 (Week 3~4)
+
+- [ ] **Task 26** — 학습-추론 구종 분류 일치 (2일, Task 23 후)
+  - Statcast pitch_type -> PitchClustering 통합
+- [ ] **Task 27** — 투수 군집 K 재검토 (1일, Task 23 후)
+  - K=4~8 범위 재탐색 (3시즌 데이터)
+
+### 우선순위 4: DQN 고도화 (Week 4~5)
+
+- [ ] **Task 28** — DQN 학습 스텝 증가 (1일, Task 23~25 후)
+  - 300K -> 500K~1M timesteps
+- [ ] **Task 29** — 탐색 전략 개선 (2일, Task 28 후)
+  - 엔트로피 보너스 / PPO 전환 검토
+  - Cease 유형 오버피팅 방지
+- [ ] **Task 30** — 5,000 에피소드 평가 (0.5일, Task 28 후)
+  - SEM ~0.036 -> ~0.016, 통계 유의성 확보
+
+### 우선순위 5: 시스템 확장 (Week 5~6)
+
+- [ ] **Task 31** — 추가 투수 10~12명 학습 (2일, Task 23~25 후)
+  - 군집별 대표 투수 2~3명씩
+- [ ] **Task 32** — 좌/우 타자 분리 모델 (3일, Task 26 후)
+  - 매치업별 추천 정확도 향상
+- [ ] **Task 33** — 시즌 적응형 학습 (1주, Task 23~29 후, 장기)
+  - 매월 incremental update
+
+---
+
+## [이전] 우선순위 판단 기준
 
 각 작업은 아래 3가지 기준으로 평가됩니다:
 - **[병목]** 이 작업을 안 하면 다른 작업이 막히는가?

@@ -169,16 +169,17 @@ MDP 성능 +0.151 → +0.247 (+63%), Knuckleball 편중 해소(entropy 0→1.3),
 - [x] 산출물: `docs/baseline_cease.md`, `docs/baseline_gallen.md`, `docs/personal_dqn_report.md`, `docs/re24_decision.md`
 - [x] 모델 파일: `dqn_cease_2024_2025.zip`, `dqn_gallen_2024_2025.zip`
 
-### [우선순위 3] 범용 모델 구종 군집화 통합 (Task 10)
-학습-추론 구종 분류 불일치 문제 (학습: Statcast pitch_type, 추론: 물리 군집).
+### 발표 후 로드맵 (Task 20~33)
 
-### [우선순위 4] RE24 매트릭스 연도별 갱신
-현재 pitch_env.py와 mdp_solver.py 두 파일에 2019 MLB 기준값이 하드코딩되어 있다.
-두 파일을 **반드시 동시에** 수정해야 한다.
+> 상세: [docs/improvement_roadmap.md](docs/improvement_roadmap.md)
+> 진단: [docs/system_diagnosis.md](docs/system_diagnosis.md)
+> 평가 체계: [docs/evaluation_framework.md](docs/evaluation_framework.md)
 
-### [우선순위 5] 인플레이 타구 확률 실데이터 기반 교체
-현재 아웃 70%, 1루타 15%, 2루타 10%, 홈런 5%로 임의 설정.
-pitch_env.py + mdp_solver.py 두 곳 동시 수정 필요.
+- **1순위 (Week 1)**: 데이터 정확도 — RE24 2024 갱신 (Task 20), 인플레이 확률 실측 (Task 21~22)
+- **2순위 (Week 2~3)**: MLP 향상 — 3시즌 200만 건 (Task 23), Calibration (Task 24), 추가 피처 (Task 25)
+- **3순위 (Week 3~4)**: 군집화 통합 — 구종 분류 일치 (Task 26), 투수 군집 K 재검토 (Task 27)
+- **4순위 (Week 4~5)**: DQN 고도화 — 학습 스텝 증가 (Task 28), 탐색 전략 (Task 29), 5000 ep 평가 (Task 30)
+- **5순위 (Week 5~6)**: 확장 — 추가 투수 (Task 31), 좌/우 분리 (Task 32), 적응형 학습 (Task 33)
 
 ### ~~[우선순위 6] 군집 1~3 DQN 학습~~ (완료, Task 18에서 재학습)
 - `scripts/train_dqn_all_clusters.py` 작성, 군집 1~3 각 300K 타임스텝 학습

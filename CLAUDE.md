@@ -79,6 +79,9 @@ SmartPitch/
 │   ├── MODEL_USAGE.md                   백엔드 통합 가이드 (11섹션, Task 19)
 │   ├── demo_api_spec.md                 데모 API 스펙 + 실제 학습 결과
 │   ├── re24_decision.md                 RE24 2019→2024 분석, 현행 유지 결정
+│   ├── system_diagnosis.md              시스템 전체 진단 보고서 (병목 분석)
+│   ├── improvement_roadmap.md           성능 향상 로드맵 (Task 20~33)
+│   ├── evaluation_framework.md          검증 및 평가 체계 (지표, 프로토콜, 오버피팅 탐지)
 │   ├── mdp_vs_env_reward_analysis.md    MDP vs PitchEnv 줄 단위 분석 + VI 수렴/정책/trace
 │   ├── experiment_comparison.md         범용 MLP Exp1~5 비교
 │   └── work_log_20260329_30.md          작업 로그 (학습용)
@@ -388,9 +391,11 @@ Gallen: +0.239 ± 1.134  (Fastball 35.7%, Curveball 33.9%, Slider 17.4%, Changeu
 3. ~~**[Medium]** 군집 1~3 DQN 학습~~ (완료)
 4. ~~**[High]** Action Space 최적화~~ (완료 — Knuckleball 편중 해소)
 5. ~~**[High]** Cease/Gallen 개인 DQN + 평가 + 문서화~~ (완료)
-6. **[High]** RE24 매트릭스 연도별 갱신 (현재 2019 하드코딩, pitch_env.py + mdp_solver.py 두 곳)
-7. **[Medium]** 인플레이 타구 확률 실데이터 기반 교체 (현재 70/15/10/5% 하드코딩)
-8. **[Low]** FastAPI 실시간 추천 API
+6. **[High]** RE24 매트릭스 2024 갱신 (Task 20) + 인플레이 확률 실데이터 교체 (Task 21)
+7. **[High]** MLP 3시즌 데이터 확장 (Task 23) + Calibration 개선 (Task 24)
+8. **[Medium]** 구종 분류 통합 (Task 26) + 투수 군집 K 재검토 (Task 27)
+9. **[Medium]** DQN 학습 스텝 증가 (Task 28) + 탐색 전략 개선 (Task 29)
+10. **[Low]** 추가 투수 학습 (Task 31) + 좌/우 분리 (Task 32) + FastAPI API
 
 ---
 
