@@ -175,7 +175,7 @@ MDP 성능 +0.151 → +0.247 (+63%), Knuckleball 편중 해소(entropy 0→1.3),
 > 진단: [docs/system_diagnosis.md](docs/system_diagnosis.md)
 > 평가 체계: [docs/evaluation_framework.md](docs/evaluation_framework.md)
 
-- **1순위 (Week 1)**: 데이터 정확도 — RE24 2024 갱신 (Task 20), 인플레이 확률 실측 (Task 21~22)
+- **1순위 (Week 1)**: 데이터 정확도 — ~~RE24 시즌별 로더 (Task 20)~~ ✅, 인플레이 확률 실측 (Task 21~22)
 - **2순위 (Week 2~3)**: MLP 향상 — 3시즌 200만 건 (Task 23), Calibration (Task 24), 추가 피처 (Task 25)
 - **3순위 (Week 3~4)**: 군집화 통합 — 구종 분류 일치 (Task 26), 투수 군집 K 재검토 (Task 27)
 - **4순위 (Week 4~5)**: DQN 고도화 — 학습 스텝 증가 (Task 28), 탐색 전략 (Task 29), 5000 ep 평가 (Task 30)
@@ -257,8 +257,8 @@ uv run fetch_wandb_run.py           # wandb_export/ 폴더에 CSV 저장
 
 ```
 [High]
-- RE24 매트릭스: 2019년 기준 하드코딩 → 연도별 갱신 로직 필요
-  (pitch_env.py, mdp_solver.py 두 곳 동시 수정)
+- ~~RE24 매트릭스: 하드코딩 → 시즌별 JSON 로더로 교체 완료 (Task 20)~~
+- Task 20-A 잔여: MDP 정책 재계산 + 평가 재실행 (2024 RE24 반영)
 
 [Medium]
 - batted ball 전이 확률 (70/15/10/5%): 실제 MLB 데이터 기반으로 교체 필요

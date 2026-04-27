@@ -91,15 +91,8 @@ class PitchEnv(gym.Env):
 
     metadata = {"render_modes": []}
 
-    # 2019 MLB 평균 기대 득점(RE24) 매트릭스 (mdp_solver에서 통합)
-    RE24_MATRIX = {
-        "0_000": 0.481, "0_100": 0.859, "0_010": 1.100, "0_110": 1.437,
-        "0_001": 1.350, "0_101": 1.784, "0_011": 1.964, "0_111": 2.292,
-        "1_000": 0.254, "1_100": 0.509, "1_010": 0.664, "1_110": 0.884,
-        "1_001": 0.939, "1_101": 1.130, "1_011": 1.376, "1_111": 1.541,
-        "2_000": 0.098, "2_100": 0.224, "2_010": 0.319, "2_110": 0.429,
-        "2_001": 0.353, "2_101": 0.471, "2_011": 0.580, "2_111": 0.736,
-    }
+    # RE24 매트릭스: re24_loader.load(season)으로 동적 로드 (하드코딩 제거)
+    # 이전 하드코딩 값(2010-2015 Tango 시대)은 data/re24_2019.json으로 이관됨
 
     # 볼넷/사구 진루 매핑 (주자 상태 문자열 → (다음 주자 상태, 득점))
     WALK_ADVANCE = {
@@ -109,14 +102,18 @@ class PitchEnv(gym.Env):
     }
 
     def __init__(self, transition_model, pitch_names: List[str], zones: List[float],
-                 pitcher_cluster: Optional[int] = None):
+                 pitcher_cluster: Optional[int] = None, season: Optional[int] = None):
         """
         :param transition_model  : 학습된 TransitionProbabilityModel 인스턴스
         :param pitch_names       : 클러스터링으로 식별된 구종 이름 리스트
         :param zones             : 투구 존 번호 리스트
         :param pitcher_cluster   : 고정 투수 군집 ID (int) — None이면 에피소드마다 무작위 선택
+        :param season            : RE24 시즌 연도 (예: 2024). None이면 기본값(2024) 사용.
         """
         super().__init__()
+        from src.re24_loader import load as load_re24, get_state_key
+        self._re24 = load_re24(season)
+        self._get_state_key = get_state_key
         import os
 
         self.transition_model = transition_model
@@ -292,7 +289,8 @@ class PitchEnv(gym.Env):
         if self.outs >= 3:
             return 0.0
         runners_str = "".join(map(str, self.runners))
-        return self.RE24_MATRIX.get(f"{self.outs}_{runners_str}", 0.0)
+        key = self._get_state_key(self.outs, self.runners[0], self.runners[1], self.runners[2])
+        return self._re24.get(key, 0.0)
 
     def _runners_str(self) -> str:
         return "".join(map(str, self.runners))

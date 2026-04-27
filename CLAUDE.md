@@ -44,6 +44,7 @@ SmartPitch/
 │   ├── pitcher_clustering.py        2023 MLB 전체 투수 군집화 (독립 실행 스크립트)
 │   ├── universal_model_trainer.py   범용 MLP 학습 (2023 MLB 전체, 독립 실행 스크립트)
 │   ├── model.py                     투구 결과 전이 확률 예측 PyTorch MLP
+│   ├── re24_loader.py               RE24 시즌별 JSON 로더 (lru_cache, 24-state 검증)
 │   ├── mdp_solver.py                MDP 가치반복(Value Iteration) 최적 정책 계산
 │   ├── pitch_env.py                 Gymnasium 커스텀 환경 (이닝 단위 시뮬레이션)
 │   ├── rl_trainer.py                DQN 에이전트 학습/평가 클래스
@@ -64,6 +65,9 @@ SmartPitch/
 ├── data/                            git에서 추적 안 함 (*.csv, *.json, *.pkl은 .gitignore)
 │   ├── batter_clusters_2023.csv         타자 군집 매핑 (batter_clustering.py가 생성)
 │   ├── pitcher_clusters_2023.csv        투수 군집 매핑 (pitcher_clustering.py가 생성)
+│   ├── re24_2019.json                   RE24 매트릭스 2019 (2016-2019+2021 aggregate, git tracked)
+│   ├── re24_2023.json                   RE24 매트릭스 2023 (FanGraphs 단일 시즌, git tracked)
+│   ├── re24_2024.json                   RE24 매트릭스 2024 (FanGraphs 단일 시즌, git tracked)
 │   ├── feature_columns_universal.json   범용 모델 입력 피처 목록 (universal_model_trainer.py가 생성)
 │   ├── target_classes_universal.json    범용 모델 출력 클래스 목록 (universal_model_trainer.py가 생성)
 │   ├── model_config_universal.json      범용 모델 아키텍처 설정 {"hidden_dims", "dropout_rate"}
@@ -79,12 +83,17 @@ SmartPitch/
 │   ├── MODEL_USAGE.md                   백엔드 통합 가이드 (11섹션, Task 19)
 │   ├── demo_api_spec.md                 데모 API 스펙 + 실제 학습 결과
 │   ├── re24_decision.md                 RE24 2019→2024 분석, 현행 유지 결정
+│   ├── re24_seasonal_analysis.md        RE24 시즌별(2019/2023/2024) 비교 분석 (Task 20)
+│   ├── CACHE_INVALIDATION.md            캐시 무효화 가이드 (RE24/MDP/pybaseball)
 │   ├── system_diagnosis.md              시스템 전체 진단 보고서 (병목 분석)
 │   ├── improvement_roadmap.md           성능 향상 로드맵 (Task 20~33)
 │   ├── evaluation_framework.md          검증 및 평가 체계 (지표, 프로토콜, 오버피팅 탐지)
 │   ├── mdp_vs_env_reward_analysis.md    MDP vs PitchEnv 줄 단위 분석 + VI 수렴/정책/trace
 │   ├── experiment_comparison.md         범용 MLP Exp1~5 비교
 │   └── work_log_20260329_30.md          작업 로그 (학습용)
+│
+├── tests/
+│   └── test_re24_loader.py              RE24 로더 유닛 테스트 (13개, Task 20)
 │
 ├── best_transition_model_universal.pth  범용 MLP 가중치 (gitignored *.pth)
 ├── smartpitch_dqn_final.zip             Cole DQN 모델 (gitignored *.zip)
@@ -101,7 +110,8 @@ SmartPitch/
 └── CLAUDE.md                    이 파일
 ```
 
-> **gitignored 주의**: `data/` 전체, `*.pth`, `*.zip`, `wandb/`, `best_dqn_model/`는 git 추적 안 됨.
+> **gitignored 주의**: `data/` 대부분(*.csv, *.pkl), `*.pth`, `*.zip`, `wandb/`, `best_dqn_model/`는 git 추적 안 됨.
+> 예외: `data/re24_*.json` (RE24 시즌별 매트릭스)은 git 추적됨.
 > 팀원이 클론 후 아래 순서로 실행해야 함:
 > 1. `uv run src/batter_clustering.py` / `uv run src/pitcher_clustering.py`
 > 2. `uv run src/universal_model_trainer.py` (범용 모델 생성, 약 20~40분)
@@ -238,10 +248,12 @@ X_encoded = pd.concat([X_num, X_cat_encoded], axis=1).astype(float)  # pandas 3.
 # feature_columns 리스트로 보관 → PitchEnv와 MDPOptimizer에서 동일 순서로 입력 구성
 ```
 
-### RE24 매트릭스 (2019 MLB, 하드코딩)
+### RE24 매트릭스 (시즌별 JSON 로드, Task 20)
 ```python
-# pitch_env.py PitchEnv.RE24_MATRIX 와 mdp_solver.py MDPOptimizer.re24_matrix 에 동일하게 존재
-# 키 형식: "{outs}_{runners}"  예) "0_000"=0.481, "2_111"=0.736
+# src/re24_loader.py를 통해 data/re24_{YYYY}.json에서 로드
+# 키 형식: "{outs}_{on_1b}{on_2b}{on_3b}"  예) "0_000"=0.49, "2_111"=0.82 (2024 기준)
+# PitchEnv(season=2024), MDPOptimizer(season=2024) — 동일 loader, lru_cache로 공유
+# 사용 가능 시즌: 2019, 2023, 2024 (data/re24_*.json)
 ```
 
 ---
@@ -384,6 +396,12 @@ Gallen: +0.239 ± 1.134  (Fastball 35.7%, Curveball 33.9%, Slider 17.4%, Changeu
   - scripts/evaluate_personal_dqn.py: 5-agent 비교 + Welch t-test + Cohen's d
   - 통계적 유의성: 모든 비교에서 p > 0.29, Cohen's d < 0.05 (negligible)
   - docs/personal_dqn_report.md, docs/MODEL_USAGE.md, docs/re24_decision.md
+- [x] Task 20: RE24 시즌별 로더 도입 (하드코딩 제거)
+  - src/re24_loader.py: JSON 기반 로더, lru_cache, 24-state 검증
+  - data/re24_{2019,2023,2024}.json: 3시즌 RE24 매트릭스 (git tracked)
+  - pitch_env.py, mdp_solver.py: 하드코딩 → load(season) 호출
+  - tests/test_re24_loader.py: 13개 유닛 테스트
+  - docs/re24_seasonal_analysis.md, docs/CACHE_INVALIDATION.md
 
 ### 다음 우선순위
 1. ~~**[High]** 물리 피처 Phase 2~~ (완료)
@@ -391,9 +409,11 @@ Gallen: +0.239 ± 1.134  (Fastball 35.7%, Curveball 33.9%, Slider 17.4%, Changeu
 3. ~~**[Medium]** 군집 1~3 DQN 학습~~ (완료)
 4. ~~**[High]** Action Space 최적화~~ (완료 — Knuckleball 편중 해소)
 5. ~~**[High]** Cease/Gallen 개인 DQN + 평가 + 문서화~~ (완료)
-6. **[High]** RE24 매트릭스 2024 갱신 (Task 20) + 인플레이 확률 실데이터 교체 (Task 21)
-7. **[High]** MLP 3시즌 데이터 확장 (Task 23) + Calibration 개선 (Task 24)
-8. **[Medium]** 구종 분류 통합 (Task 26) + 투수 군집 K 재검토 (Task 27)
+6. ~~**[High]** RE24 매트릭스 시즌별 로더 도입 (Task 20)~~ (완료)
+7. **[High]** Task 20-A: MDP 정책 재계산 + 평가 재실행 (RE24 2024 반영)
+8. **[High]** 인플레이 확률 실데이터 교체 (Task 21)
+9. **[High]** MLP 3시즌 데이터 확장 (Task 23) + Calibration 개선 (Task 24)
+10. **[Medium]** 구종 분류 통합 (Task 26) + 투수 군집 K 재검토 (Task 27)
 9. **[Medium]** DQN 학습 스텝 증가 (Task 28) + 탐색 전략 개선 (Task 29)
 10. **[Low]** 추가 투수 학습 (Task 31) + 좌/우 분리 (Task 32) + FastAPI API
 
@@ -451,9 +471,9 @@ feature/task5-6-overnight      현재 작업 브랜치 (원격 동기화됨)
    이 파일에서 hidden_dims를 읽어 MLP를 생성함. 파일 없으면 [128,64] fallback이지만,
    현재 best 모델은 [256,128,64]이므로 size mismatch 발생.
 
-8. **RE24 매트릭스 이중 정의**: `pitch_env.py`(PitchEnv.RE24_MATRIX)와
-   `mdp_solver.py`(MDPOptimizer.re24_matrix) 두 곳에 동일한 값이 있음.
-   수정 시 두 파일 모두 업데이트 필요.
+8. **RE24 매트릭스 — `re24_loader.py` 단일 소스**: Task 20에서 하드코딩을 제거하고
+   `src/re24_loader.py`로 통합. `PitchEnv`와 `MDPOptimizer` 모두 `load(season)` 호출.
+   시즌 변경 시 JSON 추가 + `season=` 파라미터 변경만 하��� 됨.
 
 9. **`clustering.py` vs `batter_clustering.py` vs `pitcher_clustering.py` 혼동 주의**:
    - `clustering.py`: 단일 투수 구종 식별 (main.py 파이프라인 내부에서 호출)

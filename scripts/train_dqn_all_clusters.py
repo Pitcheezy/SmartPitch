@@ -80,6 +80,7 @@ def _evaluate_dqn(model_path, transition_model, pitch_names, zones, cluster_id,
         pitch_names=valid_pitches,
         zones=zones,
         pitcher_cluster=cluster_id,
+        season=2024,
     )
     env = Monitor(env)
 
@@ -201,12 +202,14 @@ def train_and_evaluate(cluster_id, transition_model, pitch_names, zones,
             pitch_names=valid_pitches,
             zones=zones,
             pitcher_cluster=cluster_id,
+            season=2024,
         )
         eval_env = PitchEnv(
             transition_model=transition_model,
             pitch_names=valid_pitches,
             zones=zones,
             pitcher_cluster=cluster_id,
+            season=2024,
         )
 
         # DQN 학습

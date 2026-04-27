@@ -102,6 +102,7 @@ def _build_env():
         pitch_names=valid_pitches_0,
         zones=zones,
         pitcher_cluster=0,
+        season=2024,
     )
 
     print(f"[env] all pitch_names({len(pitch_names)})={pitch_names}")
@@ -315,6 +316,7 @@ def solve_or_load_mdp_policy(model, pitch_names, zones,
         zones=zones,
         pitcher_clusters=list(pitcher_clusters),
         valid_pitches_by_cluster=valid_pitches_by_cluster,
+        season=2024,
     )
     optimizer.solve_mdp()
     policy = optimizer.optimal_policy
@@ -555,6 +557,7 @@ def run_per_cluster_evaluation(model, pitch_names, zones,
             pitch_names=valid_pitches,
             zones=zones,
             pitcher_cluster=int(cid),
+            season=2024,
         )
 
         agents = [

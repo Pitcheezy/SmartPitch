@@ -103,6 +103,7 @@ def _build_env(model, pitch_names, pitcher_cluster=0):
         pitch_names=pitch_names,
         zones=zones,
         pitcher_cluster=pitcher_cluster,
+        season=2024,
     )
     return env, zones
 
@@ -307,6 +308,7 @@ def solve_mdp_for_pitcher(model, pitch_names, zones):
         zones=zones,
         pitcher_clusters=all_clusters,
         valid_pitches_by_cluster=valid_pitches_by_cluster,
+        season=2024,
     )
     optimizer.solve_mdp()
     return optimizer.optimal_policy

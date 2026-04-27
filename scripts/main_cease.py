@@ -221,6 +221,7 @@ def main():
             pitch_names=identified_pitch_names,
             zones=strike_zones,
             pitcher_clusters=pitcher_clusters_for_mdp,
+            season=2024,
         )
         optimal_policy = optimizer.run_optimizer()
 
@@ -231,12 +232,14 @@ def main():
             pitch_names=identified_pitch_names,
             zones=strike_zones,
             pitcher_cluster=int(pitcher_cluster_id),
+            season=2024,
         )
         eval_env = PitchEnv(
             transition_model=model_module,
             pitch_names=identified_pitch_names,
             zones=strike_zones,
             pitcher_cluster=int(pitcher_cluster_id),
+            season=2024,
         )
 
         trainer = (

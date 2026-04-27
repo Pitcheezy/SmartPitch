@@ -65,9 +65,14 @@
 
 ### 우선순위 1: 데이터 정확도 개선 (Week 1)
 
-- [ ] **Task 20** — RE24 매트릭스 2024 갱신 (0.5일, 의존성 없음)
-  - `pitch_env.py` + `mdp_solver.py` 동시 수정
-  - 2024 MLB RE24 값으로 교체 (약 6% 낮은 득점 환경)
+- [x] **Task 20** — RE24 시즌별 로더 도입 (하드코딩 → JSON 기반)
+  - `src/re24_loader.py`: 시즌별 JSON 로드 + lru_cache + 24-state 검증
+  - `data/re24_{2019,2023,2024}.json`: 3시즌 RE24 매트릭스
+  - `pitch_env.py` + `mdp_solver.py`: 하드코딩 제거 → `load(season)` 호출
+  - 호출부 전수 수정 (season=2024 명시)
+  - `tests/test_re24_loader.py`: 13개 유닛 테스트 (전 통과)
+  - `docs/re24_seasonal_analysis.md`, `docs/CACHE_INVALIDATION.md`
+  - Task 20-A (별도): MDP 정책 재계산 + 평가 재실행 (RE24 변경 반영)
 - [ ] **Task 21** — 인플레이 타구 확률 실데이터 교체 (0.5일, 의존성 없음)
   - 현재 70/15/10/5% -> 2023 Statcast BIP 집계 기반
   - `pitch_env.py` + `mdp_solver.py` 동시 수정
