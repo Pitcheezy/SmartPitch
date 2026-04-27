@@ -1,7 +1,7 @@
 # SmartPitch TODO — 작업 리스트
 
 코드를 직접 읽고 현재 상태를 확인한 후 작성했습니다.
-마지막 업데이트: 2026-04-27
+마지막 업데이트: 2026-04-28
 
 > Task 번호: 1~4 (초기), 11~19 (완료), 20~33 (발표 후 로드맵).
 > Task 5~10은 초기 계획 단계에서 정의된 항목으로, 일부는 후속 Task에 흡수됨:
@@ -79,24 +79,29 @@
   - Cease/Gallen 개인 DQN 재평가: 동일 패턴 확인
   - `docs/re24_2019_vs_2024_comparison.md`: 비교 보고서
   - 결론: RE24 변경은 절대값만 이동, 모델 간 상대 성능에 영향 없음
-- [ ] **Task 21** — 인플레이 타구 확률 실데이터 교체 (0.5일, 의존성 없음)
-  - 현재 70/15/10/5% -> 2023 Statcast BIP 집계 기반
-  - `pitch_env.py` + `mdp_solver.py` 동시 수정
+- [x] **Task 21** — 인플레이 타구 확률 실데이터 교체
+  - `scripts/compute_bip_probabilities.py`: 시즌별 BIP 확률 계산 (2021~2025)
+  - `src/bip_loader.py`: JSON 기반 BIP 로더 (lru_cache, 5시즌 평균)
+  - `pitch_env.py` + `mdp_solver.py`: 하드코딩 → `bip_loader.load_average()` 호출
+  - 3루타 분기 추가 (기존 4분기 → 5분기)
+  - 실측: out 67%, single 21.7%, double 6.3%, triple 0.56%, home_run 4.4%
+  - 결과: 전반적 보상 하락 (1루타 비율 대폭 증가), MDP 순위 보존
 - [ ] **Task 22** — 군집별 인플레이 확률 세분화 (1일, Task 21 후)
   - (batter_cluster, pitcher_cluster)별 BIP 확률 테이블
 
 ### 우선순위 2: MLP 정확도 향상 (Week 2~3)
 
-- [ ] **Task 23** — MLP 3시즌 데이터 확장 (2일, 의존성 없음)
-  - 2023+2024+2025 = ~200만 건으로 확장
-  - 예상: val_acc 57.5% -> 61~63%
-- [ ] **Task 24** — Calibration 개선 (1~3일, Task 23 후)
-  - A: Temperature Scaling (0.5일, 권장)
-  - B: Focal Loss (1일)
-  - C: 희귀 구종 Oversampling (1일)
-- [ ] **Task 25** — 추가 피처 도입 (2일, Task 23 후)
-  - release_pos_x/z, spin_rate, spin_axis
-  - 예상: val_acc 추가 +1~2pp
+- [x] **Task 23+25** — 5시즌 데이터 확장 + 추가 피처 + 모델 비교 (통합 실행)
+  - `scripts/train_5year_models.py`: 2021~2025 5시즌 355만건
+  - MLP Base (5년, 43피처): val_acc 57.4%, macro F1 0.497
+  - MLP Extended (5년, 50피처): val_acc **57.9%**, macro F1 **0.509**
+    - 추가 피처: spin_rate, spin_axis, release_pos_x/z, platoon, p_throws, stand
+  - **LightGBM (5년, 18피처): val_acc 58.7%, ECE 0.0025** (최고 calibration)
+  - `docs/5year_model_comparison.md`: 3모델 비교 보고서
+- [x] **Task 24** — Temperature Scaling 평가
+  - MLP에서 T=1.45로 수렴, 그러나 Brier/ECE 오히려 악화
+  - LightGBM은 이미 잘 calibrated (ECE 0.0025, T=1.00)
+  - 결론: 이 데이터셋에서 Temperature Scaling 비효과적
 
 ### 우선순위 3: 군집화 통합 (Week 3~4)
 

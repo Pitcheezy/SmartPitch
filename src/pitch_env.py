@@ -112,8 +112,10 @@ class PitchEnv(gym.Env):
         """
         super().__init__()
         from src.re24_loader import load as load_re24, get_state_key
+        from src.bip_loader import load_average as load_bip
         self._re24 = load_re24(season)
         self._get_state_key = get_state_key
+        self._bip = load_bip()  # 사용 가능한 전체 시즌 평균 BIP 확률
         import os
 
         self.transition_model = transition_model
@@ -401,27 +403,34 @@ class PitchEnv(gym.Env):
     def _apply_batted_ball(self) -> float:
         """
         인플레이 타구 확률적 처리 (mdp_solver 동일 가정).
-          - 범타 아웃  70%
-          - 1루타      15%
-          - 2루타      10%
-          - 홈런        5%
+        BIP 확률은 bip_loader에서 로드한 시즌 평균 사용.
         """
         p = self.np_random.random()
         r1, r2, r3 = self.runners
         runs = 0
 
-        if p < 0.70:    # 범타 아웃
+        p_out = self._bip["out"]
+        p_single = p_out + self._bip["single"]
+        p_double = p_single + self._bip["double"]
+        p_triple = p_double + self._bip["triple"]
+        # 나머지 = home_run
+
+        if p < p_out:       # 범타 아웃
             self.outs += 1
 
-        elif p < 0.85:  # 1루타: 타자→1루, 주자 1루씩 진루, 3루 주자 득점
+        elif p < p_single:  # 1루타: 타자→1루, 주자 1루씩 진루, 3루 주자 득점
             runs = r3
             self.runners = [1, r1, r2]
 
-        elif p < 0.95:  # 2루타: 타자→2루, 1루 주자→3루, 2/3루 주자 득점
+        elif p < p_double:  # 2루타: 타자→2루, 1루 주자→3루, 2/3루 주자 득점
             runs = r2 + r3
             self.runners = [0, 1, r1]
 
-        else:           # 홈런: 모든 주자 + 타자 득점
+        elif p < p_triple:  # 3루타: 타자→3루, 주자 전원 득점 (1/2/3루)
+            runs = r1 + r2 + r3
+            self.runners = [0, 0, 1]
+
+        else:               # 홈런: 모든 주자 + 타자 득점
             runs = 1 + r1 + r2 + r3
             self.runners = [0, 0, 0]
 

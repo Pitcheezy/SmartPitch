@@ -249,6 +249,15 @@ class TransitionProbabilityModel:
             if _feat in self.df.columns:
                 X_num[_feat] = self.df[_feat].astype(float)
 
+        # 확장 물리 피처(Task 25): spin_rate, spin_axis, release_pos, platoon 등
+        _extended_feats = [
+            'spin_rate_n', 'spin_axis_n', 'release_pos_x_n', 'release_pos_z_n',
+            'platoon_advantage', 'p_throws_L', 'stand_L',
+        ]
+        for _feat in _extended_feats:
+            if _feat in self.df.columns:
+                X_num[_feat] = self.df[_feat].astype(float)
+
         # ── [One-Hot Encoding: 구종/존/타자군집/투수군집] ────────────────────────
         # 최종 입력 차원: 수치(6) + pitch_name(9) + zone(13) + batter(8) + pitcher(4) ≈ 40차원
         X_cat = self.df[['mapped_pitch_name', 'zone', 'batter_cluster', 'pitcher_cluster']]
@@ -312,6 +321,7 @@ class TransitionProbabilityModel:
                                  소수 클래스(foul, hit_into_play) recall 개선 목적.
         """
         train_loader, val_loader, input_dim, output_dim = self._prepare_data()
+        self.val_loader = val_loader  # Temperature Scaling 등 후처리용
 
         self.model = MLP(input_dim, output_dim, hidden_dims, dropout_rate).to(self.device)
 

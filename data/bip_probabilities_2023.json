@@ -1,0 +1,21 @@
+{
+  "season": 2023,
+  "source": "pybaseball statcast play-by-play (computed)",
+  "computed_at": "2026-04-28T01:16:38.248621+09:00",
+  "n_total_bip": 124246,
+  "n_categorized": 124233,
+  "probabilities": {
+    "out": 0.6627,
+    "single": 0.2181,
+    "double": 0.0662,
+    "triple": 0.0057,
+    "home_run": 0.0472
+  },
+  "counts": {
+    "out": 82328,
+    "single": 27097,
+    "double": 8228,
+    "triple": 712,
+    "home_run": 5868
+  }
+}

@@ -79,8 +79,10 @@ class MDPOptimizer:
         
         # RE24 매트릭스: 시즌별 JSON에서 로드 (re24_loader.py)
         from src.re24_loader import load as load_re24, get_state_key
+        from src.bip_loader import load_average as load_bip
         self.re24_matrix = load_re24(season)
         self._get_state_key = get_state_key
+        self._bip = load_bip()  # 사용 가능한 전체 시즌 평균 BIP 확률
         
         # ── 물리 피처 lookup 테이블 로드 (Task 12 Phase 2) ──────────────────
         # (pitcher_cluster, mapped_pitch_name) → (release_speed_n, pfx_x_n, pfx_z_n)
@@ -178,28 +180,33 @@ class MDPOptimizer:
             next_runners, runs = self._advance_runners_walk(runners)
             outcomes.append(("0-0", outs, next_runners, 1.0, runs))
 
-        # 5. 인플레이 타구 (hit_into_play, 단순화된 확률적 분기)
+        # 5. 인플레이 타구 (hit_into_play) — BIP 확률은 bip_loader에서 로드
         elif outcome == 'hit_into_play':
             # 인플레이 시 해당 타석 종료이므로 다음 타자 카운트는 무조건 0-0
-            
-            # 5-1. 범타 아웃 (70% 확률) - 주자 변동 없다고 가정
-            outcomes.append(("0-0", outs + 1, runners, 0.70, 0))
-            
-            # 5-2. 1루타 (15% 확률) - 타자 1루, 주자 1루씩 진루, 3루 주자 득점
-            single_runners = {'000':'100', '100':'110', '010':'101', '110':'111', 
+            bip = self._bip
+
+            # 5-1. 범타 아웃 - 주자 변동 없다고 가정
+            outcomes.append(("0-0", outs + 1, runners, bip["out"], 0))
+
+            # 5-2. 1루타 - 타자 1루, 주자 1루씩 진루, 3루 주자 득점
+            single_runners = {'000':'100', '100':'110', '010':'101', '110':'111',
                               '001':'100', '101':'110', '011':'101', '111':'111'}
             single_runs = 1 if runners[2] == '1' else 0
-            outcomes.append(("0-0", outs, single_runners.get(runners, '100'), 0.15, single_runs))
-            
-            # 5-3. 2루타 (10% 확률) - 타자 2루, 주자 2루씩 진루, 2/3루 주자 득점
-            double_runners = {'000':'010', '100':'011', '010':'010', '110':'011', 
+            outcomes.append(("0-0", outs, single_runners.get(runners, '100'), bip["single"], single_runs))
+
+            # 5-3. 2루타 - 타자 2루, 주자 2루씩 진루, 2/3루 주자 득점
+            double_runners = {'000':'010', '100':'011', '010':'010', '110':'011',
                               '001':'010', '101':'011', '011':'010', '111':'011'}
             double_runs = int(runners[1]) + int(runners[2])
-            outcomes.append(("0-0", outs, double_runners.get(runners, '010'), 0.10, double_runs))
-            
-            # 5-4. 홈런 (5% 확률) - 타자 및 모든 주자 득점, 베이스 초기화
+            outcomes.append(("0-0", outs, double_runners.get(runners, '010'), bip["double"], double_runs))
+
+            # 5-4. 3루타 - 타자 3루, 주자 전원 득점 (1/2/3루)
+            triple_runs = int(runners[0]) + int(runners[1]) + int(runners[2])
+            outcomes.append(("0-0", outs, '001', bip["triple"], triple_runs))
+
+            # 5-5. 홈런 - 타자 및 모든 주자 득점, 베이스 초기화
             hr_runs = 1 + int(runners[0]) + int(runners[1]) + int(runners[2])
-            outcomes.append(("0-0", outs, '000', 0.05, hr_runs))
+            outcomes.append(("0-0", outs, '000', bip["home_run"], hr_runs))
             
         else:
             # 기타 알 수 없는 결과 (상태 유지)

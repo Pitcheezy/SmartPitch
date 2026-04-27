@@ -1,0 +1,21 @@
+{
+  "season": 2022,
+  "source": "pybaseball statcast play-by-play (computed)",
+  "computed_at": "2026-04-28T01:17:04.097492+09:00",
+  "n_total_bip": 124275,
+  "n_categorized": 124266,
+  "probabilities": {
+    "out": 0.6716,
+    "single": 0.2174,
+    "double": 0.0639,
+    "triple": 0.0052,
+    "home_run": 0.042
+  },
+  "counts": {
+    "out": 83454,
+    "single": 27014,
+    "double": 7940,
+    "triple": 643,
+    "home_run": 5215
+  }
+}
