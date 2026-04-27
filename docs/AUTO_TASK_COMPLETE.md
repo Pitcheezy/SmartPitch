@@ -60,16 +60,49 @@
 
 ### 변경 요약
 1. **추정치 명확화**: improvement_roadmap.md의 정량 추정치에 "(실측 전 추정)" 명시 강화
-   - val_acc +3~5pp, +1~2pp 등에 한계 조건 부기
 2. **마일스톤 M3 조건부 표현**: "DQN 전 군집 우위" -> 가설로 재정의
-   - 동일 액션 공간 + 5000+ ep + p < 0.05 조건 명시
-   - 미달 시 fallback 전략 ("MDP 동등 + 실시간 추론 이점") 제시
 3. **Task 번호 연속성 검증**: Task 1~33 매핑 정리
-   - Task 5 -> Task 20 (RE24), Task 6 -> Task 21 (인플레이), Task 10 -> Task 26 (구종 통합)
 4. **README 링크 보완**: system_diagnosis.md, improvement_roadmap.md, evaluation_framework.md 추가
 
+---
+
+## Task 20: RE24 시즌별 로더 도입 (2026-04-27)
+
+### 완료 내용
+1. **`src/re24_loader.py` 신규 생성**: JSON 기반 로더, lru_cache, 24-state 검증, get_state_key() 유틸
+2. **`data/re24_{2019,2023,2024}.json`**: 3시즌 RE24 매트릭스 (git tracked)
+3. **`scripts/compute_re24_per_season.py`**: Statcast play-by-play RE24 재현/검증 스크립트 (286줄)
+4. **하드코딩 제거**: `pitch_env.py`, `mdp_solver.py`의 RE24_MATRIX 딕셔너리 → `load(season)` 호출
+5. **호출부 전수 수정** (season=2024 명시):
+   - `src/main.py`, `src/evaluate_baselines.py`
+   - `scripts/main_cease.py`, `scripts/main_gallen.py`, `scripts/evaluate_personal_dqn.py`
+   - `scripts/train_dqn_all_clusters.py`, `scripts/analyze_mdp_vs_env.py`
+6. **`tests/test_re24_loader.py`**: 13개 유닛 테스트 (전 통과)
+7. **문서**: `docs/re24_seasonal_analysis.md`, `docs/CACHE_INVALIDATION.md`
+
+---
+
+## Task 20-A: RE24 2024 반영 — MDP 재계산 + 전 베이스라인 재평가 (2026-04-27)
+
+### 핵심 발견
+**RE24 변경은 절대값만 균일하게 Δ≈+0.040 이동시키며, 모든 모델 간 상대 순위가 보존된다.**
+
+### 완료 내용
+1. `data/mdp_optimal_policy.pkl` 재생성 (2024 RE24, VI 18회 수렴)
+2. 군집 0~3 베이스라인 재평가: 전 에이전트 Δ≈+0.040 균일 오프셋
+3. Cease/Gallen 개인 DQN 재평가: 동일 패턴 확인
+4. `docs/re24_2019_vs_2024_comparison.md`: 비교 보고서
+
+### 수치 업데이트 (2024 RE24 기준)
+```
+군집 0: MDP +0.298 > MostFreq +0.260 > Freq +0.257 > Random +0.225
+군집 1: MDP +0.286 > Freq +0.209 > MostFreq +0.180 > Random +0.176
+군집 2: MDP +0.300 > Random +0.269 > Freq +0.243 > MostFreq +0.241
+군집 3: MDP +0.296 > MostFreq +0.291 > Freq +0.242 > Random +0.211
+
+Cease: MDP +0.291 > Freq +0.273 > MostFreq +0.260 > DQN +0.238 > Random +0.236
+Gallen: DQN +0.279 = MDP +0.279 > Random +0.264 > MostFreq +0.260 > Freq +0.244
+```
+
 ### 다음 단계
-**Task 20: RE24 매트릭스 2024 갱신** (0.5일, 의존성 없음)부터 시작 권장.
-- `pitch_env.py` + `mdp_solver.py` 두 파일 동시 수정
-- 방법: pybaseball run expectancy 또는 외부 소스에서 2024 값 조사
-- Fallback: 현행 2019 유지 (상대 비교 무영향, docs/re24_decision.md 참조)
+**Task 21: 인플레이 타구 확률 실데이터 교체** (0.5일, 의존성 없음)
