@@ -51,7 +51,25 @@
 
 > DQN `.predict()`만 사용 시 `.pth` 파일 불필요
 
-### 남은 작업 (선택)
-1. RE24 매트릭스 2024 시즌 갱신 (현재 2019 하드코딩)
-2. 인플레이 타구 확률 실데이터 교체 (현재 70/15/10/5%)
-3. FastAPI 실시간 추천 API
+### 남은 작업 → 로드맵으로 체계화 완료
+상세: [docs/improvement_roadmap.md](improvement_roadmap.md)
+
+---
+
+## 후속 정리 작업 (2026-04-27, 커밋 `c57c92b`)
+
+### 변경 요약
+1. **추정치 명확화**: improvement_roadmap.md의 정량 추정치에 "(실측 전 추정)" 명시 강화
+   - val_acc +3~5pp, +1~2pp 등에 한계 조건 부기
+2. **마일스톤 M3 조건부 표현**: "DQN 전 군집 우위" -> 가설로 재정의
+   - 동일 액션 공간 + 5000+ ep + p < 0.05 조건 명시
+   - 미달 시 fallback 전략 ("MDP 동등 + 실시간 추론 이점") 제시
+3. **Task 번호 연속성 검증**: Task 1~33 매핑 정리
+   - Task 5 -> Task 20 (RE24), Task 6 -> Task 21 (인플레이), Task 10 -> Task 26 (구종 통합)
+4. **README 링크 보완**: system_diagnosis.md, improvement_roadmap.md, evaluation_framework.md 추가
+
+### 다음 단계
+**Task 20: RE24 매트릭스 2024 갱신** (0.5일, 의존성 없음)부터 시작 권장.
+- `pitch_env.py` + `mdp_solver.py` 두 파일 동시 수정
+- 방법: pybaseball run expectancy 또는 외부 소스에서 2024 값 조사
+- Fallback: 현행 2019 유지 (상대 비교 무영향, docs/re24_decision.md 참조)
