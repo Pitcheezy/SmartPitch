@@ -11,10 +11,10 @@
 
 | Agent | Mean Reward ± Std | Pitch Entropy | Mean Pitches/Ep | Action Space | Notes |
 |---|---|---|---|---|---|
-| Random | +0.185 ± 1.177 | 2.079 | 7.36 | 104 |  |
-| MostFrequent (Cole 2019) | +0.220 ± 1.177 | -0.000 | 8.48 | 104 |  |
-| Frequency (2023 League) | +0.148 ± 1.208 | 1.852 | 7.75 | 104 |  |
-| Frequency (Cole 2019) | +0.224 ± 1.137 | 1.243 | 7.78 | 104 |  |
+| Random | +0.225 ± 1.179 | 2.079 | 7.36 | 104 |  |
+| MostFrequent (Cole 2019) | +0.260 ± 1.180 | -0.000 | 8.48 | 104 |  |
+| Frequency (2023 League) | +0.202 ± 1.205 | 1.853 | 7.75 | 104 |  |
+| Frequency (Cole 2019) | +0.264 ± 1.140 | 1.243 | 7.78 | 104 |  |
 | DQN (Cole 2019 ref) | +0.436 ± 1.255 | — | — | ~52 (Cole 식별 4구종 × 13존) | W&B run h4n3o0di |
 
 ## 비고

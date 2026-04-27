@@ -73,6 +73,12 @@
   - `tests/test_re24_loader.py`: 13개 유닛 테스트 (전 통과)
   - `docs/re24_seasonal_analysis.md`, `docs/CACHE_INVALIDATION.md`
   - Task 20-A (별도): MDP 정책 재계산 + 평가 재실행 (RE24 변경 반영)
+- [x] **Task 20-A** — MDP 정책 재계산 + 평가 재실행 (2024 RE24 반영)
+  - `data/mdp_optimal_policy.pkl` 재생성 (2024 RE24, VI 18회 수렴)
+  - 군집 0~3 베이스라인 재평가: 전 에이전트 Δ≈+0.040 균일 오프셋, 상대 순위 보존
+  - Cease/Gallen 개인 DQN 재평가: 동일 패턴 확인
+  - `docs/re24_2019_vs_2024_comparison.md`: 비교 보고서
+  - 결론: RE24 변경은 절대값만 이동, 모델 간 상대 성능에 영향 없음
 - [ ] **Task 21** — 인플레이 타구 확률 실데이터 교체 (0.5일, 의존성 없음)
   - 현재 70/15/10/5% -> 2023 Statcast BIP 집계 기반
   - `pitch_env.py` + `mdp_solver.py` 동시 수정

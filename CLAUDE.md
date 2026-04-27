@@ -340,16 +340,17 @@ Cluster 2: +0.242 ± 1.130  (Fastball 56%, Sinker 12%, Slider 10%) — 104 actio
 Cluster 3: +0.215 ± 1.157  (Fastball 45%, Splitter 13%, Curveball 12%) — 104 actions (8구종)
 ※ Knuckleball 편중 0%로 완전 해소
 
-[DQN — 개인 맞춤 모델 (Task 19: 2024+2025 시즌, 300K timesteps, 1000 ep 평가)]
-Cease:  +0.198 ± 1.177  (Fastball 83.3%, Changeup 9.2%, Slider 7.6%) — 39 actions (3구종)
-Gallen: +0.239 ± 1.134  (Fastball 35.7%, Curveball 33.9%, Slider 17.4%, Changeup 13.0%) — 52 actions (4구종)
+[DQN — 개인 맞춤 모델 (Task 19, 2024 RE24 기준 재평가, 1000 ep)]
+Cease:  +0.238 ± 1.180  (Fastball 83.3%, Changeup 9.2%, Slider 7.6%) — 39 actions (3구종)
+Gallen: +0.279 ± 1.138  (Fastball 35.7%, Curveball 33.9%, Slider 17.4%, Changeup 13.0%) — 52 actions (4구종)
 ※ 통계적 유의성: 모든 베이스라인 대비 p > 0.29, Cohen's d < 0.05 (negligible)
 
-[베이스라인 비교 — evaluate_baselines.py, 1000 ep, Task 18 action space 최적화 후]
-군집 0: DQN +0.436 > MDP +0.258 > MostFreq +0.220 > Random +0.185 > Freq +0.175 (DQN 최고)
-군집 1: MDP +0.247 > DQN +0.188 > Freq +0.169 > MostFreq +0.140 > Random +0.136 (MDP 최고)
-군집 2: MDP +0.262 > DQN +0.242 > Random +0.229 > Freq +0.203 > MostFreq +0.201 (MDP 최고)
-군집 3: MDP +0.256 > MostFreq +0.251 > DQN +0.215 > Freq +0.202 > Random +0.171 (MDP 최고)
+[베이스라인 비교 — evaluate_baselines.py, 2024 RE24, 1000 ep]
+군집 0: MDP +0.298 > MostFreq +0.260 > Freq +0.257 > Random +0.225 (MDP 최고)
+군집 1: MDP +0.286 > Freq +0.209 > MostFreq +0.180 > Random +0.176 (MDP 최고)
+군집 2: MDP +0.300 > Random +0.269 > Freq +0.243 > MostFreq +0.241 (MDP 최고)
+군집 3: MDP +0.296 > MostFreq +0.291 > Freq +0.242 > Random +0.211 (MDP 최고)
+※ RE24 변경(Tango era→2024)은 전 에이전트 Δ≈+0.040 균일 오프셋, 상대 순위 보존
 ```
 
 ---
@@ -411,7 +412,7 @@ Gallen: +0.239 ± 1.134  (Fastball 35.7%, Curveball 33.9%, Slider 17.4%, Changeu
 4. ~~**[High]** Action Space 최적화~~ (완료 — Knuckleball 편중 해소)
 5. ~~**[High]** Cease/Gallen 개인 DQN + 평가 + 문서화~~ (완료)
 6. ~~**[High]** RE24 매트릭스 시즌별 로더 도입 (Task 20)~~ (완료)
-7. **[High]** Task 20-A: MDP 정책 재계산 + 평가 재실행 (RE24 2024 반영)
+7. ~~**[High]** Task 20-A: MDP 정책 재계산 + 평가 재실행 (RE24 2024 반영)~~ (완료)
 8. **[High]** 인플레이 확률 실데이터 교체 (Task 21)
 9. **[High]** MLP 3시즌 데이터 확장 (Task 23) + Calibration 개선 (Task 24)
 10. **[Medium]** 구종 분류 통합 (Task 26) + 투수 군집 K 재검토 (Task 27)
